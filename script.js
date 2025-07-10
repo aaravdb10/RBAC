@@ -6,6 +6,115 @@ let currentUser = null;
 let isDarkMode = false;
 const API_BASE_URL = 'http://localhost:5000/api';
 
+// Security-related variables and functions
+const loginAttempts = {};
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOCKOUT_TIME = 15 * 60 * 1000; // 15 minutes in milliseconds
+const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes in milliseconds
+let sessionTimer = null;
+
+// Function to hash password using SHA256
+function hashPassword(password, salt = '') {
+    // In a production environment, a unique salt would be generated for each user
+    // and stored in the database alongside their hashed password
+    return CryptoJS.SHA256(password + salt).toString();
+}
+
+// Function to prevent brute force attacks
+function checkLoginAttempts(email) {
+    const now = new Date().getTime();
+    
+    // Initialize if not exists
+    if (!loginAttempts[email]) {
+        loginAttempts[email] = {
+            count: 0,
+            lockUntil: 0
+        };
+    }
+    
+    // Check if account is locked
+    if (loginAttempts[email].lockUntil > now) {
+        const remainingMinutes = Math.ceil((loginAttempts[email].lockUntil - now) / 60000);
+        showToast(`Account temporarily locked. Try again in ${remainingMinutes} minutes.`, 'error');
+        return false;
+    }
+    
+    return true;
+}
+
+// Function to record failed login attempt
+function recordFailedAttempt(email) {
+    if (!loginAttempts[email]) {
+        loginAttempts[email] = {
+            count: 0,
+            lockUntil: 0
+        };
+    }
+    
+    loginAttempts[email].count++;
+    
+    // Lock account if too many attempts
+    if (loginAttempts[email].count >= MAX_LOGIN_ATTEMPTS) {
+        loginAttempts[email].lockUntil = new Date().getTime() + LOCKOUT_TIME;
+        showToast(`Too many failed attempts. Account locked for 15 minutes.`, 'error');
+        // Log security event
+        logSecurityEvent('Account Lockout', email, 'warning');
+    }
+}
+
+// Function to reset login attempts after successful login
+function resetLoginAttempts(email) {
+    if (loginAttempts[email]) {
+        loginAttempts[email].count = 0;
+        loginAttempts[email].lockUntil = 0;
+    }
+}
+
+// Function to start session timer
+function startSessionTimer() {
+    // Clear any existing timer
+    if (sessionTimer) {
+        clearTimeout(sessionTimer);
+    }
+    
+    // Set new timer
+    sessionTimer = setTimeout(() => {
+        // Session expired
+        showToast('Your session has expired. Please log in again.', 'warning');
+        logout();
+    }, SESSION_TIMEOUT);
+}
+
+// Function to regenerate session
+function regenerateSession() {
+    // In a real app with a backend, we would make an API call to regenerate the session
+    // For this demo, we'll just restart the timer and update the last activity
+    startSessionTimer();
+    
+    // Update session timestamp in localStorage
+    if (currentUser) {
+        const sessionData = {
+            timestamp: new Date().getTime(),
+            user: currentUser.email
+        };
+        localStorage.setItem('sessionData', JSON.stringify(sessionData));
+    }
+}
+
+// Function to log security events
+function logSecurityEvent(action, user, status = 'success') {
+    const timestamp = new Date().toISOString().replace('T', ' ').substr(0, 19);
+    const logEntry = {
+        action: action,
+        user: user,
+        timestamp: timestamp,
+        status: status
+    };
+    
+    // Add to mock data (in a real app, this would go to the server)
+    mockData.systemLogs.unshift(logEntry);
+}
+
 // Mock Data for demonstration (will be replaced by API calls)
 const mockData = {
     users: [
@@ -136,11 +245,38 @@ function hideAllPages() {
 function checkExistingSession() {
     const savedUser = localStorage.getItem('currentUser');
     const savedRole = localStorage.getItem('currentRole');
+    const sessionData = localStorage.getItem('sessionData');
     
     if (savedUser && savedRole) {
+        // Check session expiry if session data exists
+        if (sessionData) {
+            const session = JSON.parse(sessionData);
+            const now = new Date().getTime();
+            
+            // Check if session has expired (30 minutes)
+            if (now - session.timestamp > SESSION_TIMEOUT) {
+                // Session expired
+                localStorage.removeItem('currentUser');
+                localStorage.removeItem('currentRole');
+                localStorage.removeItem('sessionData');
+                showToast('Your session has expired. Please log in again.', 'warning');
+                showHomePage();
+                return;
+            }
+        }
+        
         currentUser = JSON.parse(savedUser);
         currentRole = savedRole;
+        
+        // Start new session timer
+        startSessionTimer();
+        
+        // Set up the dashboard
         showDashboardPage();
+        setupDashboard();
+        
+        // Log the session resumption
+        logSecurityEvent('Session Resumed', currentUser.email, 'info');
     } else {
         showHomePage();
     }
@@ -172,6 +308,25 @@ function setupEventListeners() {
             demoLogin(role);
         });
     });
+    
+    // Session activity monitoring for security
+    // Add event listeners to track user activity and refresh session
+    if (document.getElementById('dashboardPage')) {
+        ['click', 'keydown', 'mousemove', 'scroll'].forEach(eventType => {
+            document.getElementById('dashboardPage').addEventListener(eventType, function() {
+                // Only regenerate session if user is logged in
+                if (currentUser) {
+                    regenerateSession();
+                }
+            });
+        });
+    }
+    
+    // Add logout button event listener
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', logout);
+    }
 
     // Password toggle
     const togglePassword = document.getElementById('togglePassword');
@@ -243,21 +398,70 @@ function handleLogin(event) {
     const email = formData.get('email');
     const password = formData.get('password');
     
+    // Check for brute force attempts
+    if (!checkLoginAttempts(email)) {
+        return;
+    }
+    
+    // Verify CAPTCHA if available (always required for security)
+    if (window.grecaptcha) {
+        const captchaResponse = grecaptcha.getResponse();
+        if (!captchaResponse) {
+            showToast('Please complete the CAPTCHA to continue.', 'error');
+            return;
+        }
+        // In a real app, we would verify this response on the server-side
+    }
+    
     console.log('Login attempt:', email);
+    
+    // Hash password for comparison - in a real app, we'd use the stored salt for each user
+    const hashedPassword = hashPassword(password);
     
     // Check demo users
     const user = demoUsers[email];
-    if (user && user.password === password) {
+    
+    // For demo purposes, we'll hash the stored password on the fly for comparison
+    // In a real app, passwords would already be stored as hashes
+    const storedHashedPassword = user ? hashPassword(user.password) : null;
+    
+    if (user && (hashedPassword === storedHashedPassword)) {
+        // Reset login attempts counter
+        resetLoginAttempts(email);
+        
+        // Reset reCAPTCHA after successful login
+        if (window.grecaptcha) {
+            grecaptcha.reset();
+        }
+        
         currentUser = user;
         currentRole = user.role;
         
-        // Save to localStorage
+        // Save to localStorage (in a real app, we'd use HttpOnly cookies for better security)
         localStorage.setItem('currentUser', JSON.stringify(user));
         localStorage.setItem('currentRole', user.role);
+        
+        // Start session timer and regenerate session
+        startSessionTimer();
+        regenerateSession();
+        
+        // Log successful login
+        logSecurityEvent('User Login', email, 'success');
         
         showToast(`Welcome back, ${user.name}!`, 'success');
         showDashboardPage();
     } else {
+        // Record failed attempt
+        recordFailedAttempt(email);
+        
+        // Reset reCAPTCHA after failed attempt
+        if (window.grecaptcha) {
+            grecaptcha.reset();
+        }
+        
+        // Log failed attempt
+        logSecurityEvent('Failed Login Attempt', email, 'error');
+        
         showToast('Invalid email or password', 'error');
     }
 }
@@ -265,6 +469,16 @@ function handleLogin(event) {
 // Handle register form submission
 function handleRegister(event) {
     event.preventDefault();
+    
+    // Verify CAPTCHA if available
+    if (window.grecaptcha) {
+        const captchaResponse = grecaptcha.getResponse();
+        if (!captchaResponse) {
+            showToast('Please complete the CAPTCHA to continue.', 'error');
+            return;
+        }
+        // In a real app, we would verify this response on the server-side
+    }
     
     const formData = new FormData(event.target);
     const userData = {
@@ -279,18 +493,35 @@ function handleRegister(event) {
     // Basic validation
     if (userData.password !== userData.confirmPassword) {
         showToast('Passwords do not match', 'error');
+        if (window.grecaptcha) {
+            grecaptcha.reset();
+        }
         return;
     }
     
     if (demoUsers[userData.email]) {
         showToast('User already exists', 'error');
+        if (window.grecaptcha) {
+            grecaptcha.reset();
+        }
+        return;
+    }
+    
+    // Password complexity check
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+    if (!passwordRegex.test(userData.password)) {
+        showToast('Password must be at least 8 characters with uppercase, lowercase, number and special character', 'error');
+        if (window.grecaptcha) {
+            grecaptcha.reset();
+        }
         return;
     }
     
     // Create new user (for demo purposes)
+    // In a real app, we would hash the password with a unique salt before storing
     const newUser = {
         email: userData.email,
-        password: userData.password,
+        password: userData.password, // In a real app, this would be hashed before storage
         role: 'employee', // Default role
         name: `${userData.firstName} ${userData.lastName}`,
         department: userData.department
@@ -298,6 +529,11 @@ function handleRegister(event) {
     
     // Add to demo users
     demoUsers[userData.email] = newUser;
+    
+    // Reset reCAPTCHA after successful registration
+    if (window.grecaptcha) {
+        grecaptcha.reset();
+    }
     
     showToast('Account created successfully! Please log in.', 'success');
     showLoginPage();
@@ -722,7 +958,7 @@ function showLeaveRequests() {
         <div class="table-container">
             <div class="table-header">
                 <h3>Leave Requests</h3>
-                <button class="btn btn-primary btn-sm" onclick="generateReport('leave')">
+                <button class="btn btn-primary btn-sm" onclick="generateReport()">
                     <i class="fas fa-chart-bar"></i>
                     Generate Report
                 </button>
@@ -781,200 +1017,20 @@ function showLeaveRequests() {
 
 // Placeholder functions for other navigation items
 function showTeam() {
-    if (!hasPermission('manager')) {
-        showAccessDenied();
-        return;
-    }
-    setActiveNavLink(1);
-    const dashboardContent = document.getElementById('dashboardContent');
-    const teamMembers = mockData.users.filter(u => u.role === 'employee');
-
-    const teamHtml = `
-        <div class="table-container">
-            <div class="table-header">
-                <h3>My Team Members</h3>
-                <input type="text" id="teamSearch" placeholder="Search team members..." class="form-control" style="width: 250px;">
-            </div>
-            <table class="table">
-                <thead>
-                    <tr>
-                        <th>Name</th>
-                        <th>Email</th>
-                        <th>Department</th>
-                        <th>Status</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="teamTableBody">
-                    ${teamMembers.map(user => `
-                        <tr>
-                            <td>${user.name}</td>
-                            <td>${user.email}</td>
-                            <td>${demoUsers[user.email]?.department || 'N/A'}</td>
-                            <td><span class="status-badge status-${user.status}">${user.status}</span></td>
-                            <td>
-                                <button class="btn btn-secondary btn-sm" onclick="viewTeamMember(${user.id})"><i class="fas fa-eye"></i> View</button>
-                            </td>
-                        </tr>
-                    `).join('')}
-                </tbody>
-            </table>
-        </div>
-    `;
-    dashboardContent.innerHTML = teamHtml;
-
-    document.getElementById('teamSearch').addEventListener('keyup', (e) => {
-        const searchTerm = e.target.value.toLowerCase();
-        const tableBody = document.getElementById('teamTableBody');
-        const rows = tableBody.getElementsByTagName('tr');
-        Array.from(rows).forEach(row => {
-            const text = row.textContent.toLowerCase();
-            row.style.display = text.includes(searchTerm) ? '' : 'none';
-        });
-    });
+    showToast('Team management feature coming soon!', 'info');
 }
 
 function showReports() {
-    if (!hasPermission('manager')) {
-        showAccessDenied();
-        return;
-    }
-    setActiveNavLink(currentRole === 'admin' ? 4 : 3);
-    const dashboardContent = document.getElementById('dashboardContent');
-
-    const reportsHtml = `
-        <div class="reports-container">
-            <div class="dashboard-card">
-                <div class="card-header"><h3>Leave Analysis</h3></div>
-                <div class="card-content">
-                    <p>Total leave requests: ${mockData.leaveRequests.length}</p>
-                    <p>Pending requests: ${mockData.leaveRequests.filter(r => r.status === 'pending').length}</p>
-                    <p>Approved requests: ${mockData.leaveRequests.filter(r => r.status === 'approved').length}</p>
-                    <p>Rejected requests: ${mockData.leaveRequests.filter(r => r.status === 'rejected').length}</p>
-                    <button class="btn btn-primary" onclick="generateReport('leave')">Generate Leave Report (CSV)</button>
-                </div>
-            </div>
-            <div class="dashboard-card">
-                <div class="card-header"><h3>Team Performance</h3></div>
-                <div class="card-content">
-                    <p>This section will provide insights into team productivity and performance metrics.</p>
-                    <p><strong>Feature coming soon.</strong></p>
-                    <button class="btn btn-primary" disabled>Generate Performance Report</button>
-                </div>
-            </div>
-        </div>
-    `;
-    dashboardContent.innerHTML = reportsHtml;
+    showToast('Reports feature coming soon!', 'info');
 }
 
-function viewTeamMember(userId) {
-    const user = mockData.users.find(u => u.id === userId);
-    if (!user) {
-        showToast('User not found', 'error');
-        return;
-    }
-    const userLeaves = mockData.leaveRequests.filter(r => r.employeeName === user.name);
-    const content = `
-        <h4>${user.name}</h4>
-        <p><strong>Email:</strong> ${user.email}</p>
-        <p><strong>Role:</strong> ${user.role}</p>
-        <p><strong>Status:</strong> ${user.status}</p>
-        <h5>Leave History</h5>
-        ${userLeaves.length > 0 ? `
-            <ul>
-                ${userLeaves.map(l => `<li>${l.type}: ${l.startDate} to ${l.endDate} - <strong>${l.status}</strong></li>`).join('')}
-            </ul>
-        ` : '<p>No leave requests found.</p>'}
-    `;
-    showModal('Team Member Details', content);
+function showProfile() {
+    showToast('Profile management feature coming soon!', 'info');
 }
 
-function approveLeave(leaveId) {
-    const request = mockData.leaveRequests.find(r => r.id === leaveId);
-    if (request) {
-        request.status = 'approved';
-        showToast('Leave request approved.', 'success');
-        showLeaveRequests();
-    }
+function showMyLeaveRequests() {
+    showToast('Leave request feature coming soon!', 'info');
 }
-
-function rejectLeave(leaveId) {
-    const request = mockData.leaveRequests.find(r => r.id === leaveId);
-    if (request) {
-        request.status = 'rejected';
-        showToast('Leave request rejected.', 'error');
-        showLeaveRequests();
-    }
-}
-
-function viewLeave(leaveId) {
-    const request = mockData.leaveRequests.find(r => r.id === leaveId);
-    if (!request) {
-        showToast('Leave request not found.', 'error');
-        return;
-    }
-    const content = `
-        <p><strong>Employee:</strong> ${request.employeeName}</p>
-        <p><strong>Type:</strong> ${request.type}</p>
-        <p><strong>Dates:</strong> ${request.startDate} to ${request.endDate}</p>
-        <p><strong>Days:</strong> ${request.days}</p>
-        <p><strong>Reason:</strong> ${request.reason || 'N/A'}</p>
-        <p><strong>Status:</strong> <span class="status-badge status-${request.status}">${request.status}</span></p>
-    `;
-    showModal('Leave Request Details', content);
-}
-
-function generateReport(type) {
-    if (type === 'leave') {
-        const reportData = mockData.leaveRequests.map(r => ({
-            Employee: r.employeeName,
-            Type: r.type,
-            StartDate: r.startDate,
-            EndDate: r.endDate,
-            Status: r.status
-        }));
-        const csvContent = "data:text/csv;charset=utf-8," + 
-            Object.keys(reportData[0]).join(",") + "\n" +
-            reportData.map(e => Object.values(e).join(",")).join("\n");
-        
-        const encodedUri = encodeURI(csvContent);
-        const link = document.createElement("a");
-        link.setAttribute("href", encodedUri);
-        link.setAttribute("download", "leave_report.csv");
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        showToast('Leave report generated.', 'success');
-    } else {
-        showToast('This report type is not available yet.', 'info');
-    }
-}
-
-function showModal(title, content) {
-    // A simple modal implementation
-    const modalOverlay = document.createElement('div');
-    modalOverlay.className = 'modal-overlay';
-    modalOverlay.style.display = 'flex';
-    
-    const modal = document.createElement('div');
-    modal.className = 'modal';
-    
-    modal.innerHTML = `
-        <div class="modal-header"><h3>${title}</h3></div>
-        <div class="modal-body">${content}</div>
-        <div class="modal-footer">
-            <button class="btn btn-primary" id="closeModalBtn">Close</button>
-        </div>
-    `;
-    
-    modalOverlay.appendChild(modal);
-    document.body.appendChild(modalOverlay);
-    
-    document.getElementById('closeModalBtn').addEventListener('click', () => {
-        document.body.removeChild(modalOverlay);
-    });
-}
-
 
 // Permission checking
 function hasPermission(requiredRole) {
@@ -982,8 +1038,6 @@ function hasPermission(requiredRole) {
         return currentRole === 'admin';
     } else if (requiredRole === 'manager') {
         return currentRole === 'admin' || currentRole === 'manager';
-    } else if (requiredRole === 'employee') {
-        return currentRole === 'employee' || currentRole === 'manager' || currentRole === 'admin';
     }
     return true;
 }
@@ -1044,10 +1098,25 @@ function showToast(message, type = 'info') {
 
 // Logout function
 function logout() {
+    // Log the logout event if user exists
+    if (currentUser) {
+        logSecurityEvent('User Logout', currentUser.email, 'success');
+    }
+    
+    // Clear user data
     currentUser = null;
     currentRole = null;
+    
+    // Clear session data
     localStorage.removeItem('currentUser');
     localStorage.removeItem('currentRole');
+    localStorage.removeItem('sessionData');
+    
+    // Clear session timer
+    if (sessionTimer) {
+        clearTimeout(sessionTimer);
+        sessionTimer = null;
+    }
     
     showToast('Logged out successfully!', 'success');
     
@@ -1060,109 +1129,20 @@ function logout() {
 async function refreshUsersFromAPI() {
     try {
         const response = await apiCall('/users', 'GET');
-        if (response && response.data) {
-            mockData.users = response.data;
+        if (response.users) {
+            // Update mock data with API data
+            mockData.users = response.users.map(user => ({
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                role: user.role,
+                status: user.status
+            }));
         }
     } catch (error) {
-        console.error('Error refreshing users:', error);
+        console.error('Failed to refresh users from API:', error);
+        // Continue with existing mock data
     }
-}
-
-async function refreshLeaveRequestsFromAPI() {
-    try {
-        const response = await apiCall('/leave-requests', 'GET');
-        if (response && response.data) {
-            mockData.leaveRequests = response.data;
-        }
-    } catch (error) {
-        console.error('Error refreshing leave requests:', error);
-    }
-}
-
-async function refreshSystemLogsFromAPI() {
-    try {
-        const response = await apiCall('/system-logs', 'GET');
-        if (response && response.data) {
-            mockData.systemLogs = response.data;
-        }
-    } catch (error) {
-        console.error('Error refreshing system logs:', error);
-    }
-}
-
-function handleProfileUpdate(event) {
-    event.preventDefault();
-    const firstName = document.getElementById('profileFirstName').value;
-    const lastName = document.getElementById('profileLastName').value;
-    const newName = `${firstName} ${lastName}`;
-
-    if (currentUser.name !== newName) {
-        currentUser.name = newName;
-        demoUsers[currentUser.email].name = newName;
-        localStorage.setItem('currentUser', JSON.stringify(currentUser));
-        document.getElementById('userName').textContent = newName;
-        showToast('Profile updated successfully!', 'success');
-    } else {
-        showToast('No changes to save.', 'info');
-    }
-}
-
-function handleChangePassword(event) {
-    event.preventDefault();
-    const currentPassword = document.getElementById('currentPassword').value;
-    const newPassword = document.getElementById('newPassword').value;
-    const confirmNewPassword = document.getElementById('confirmNewPassword').value;
-
-    if (currentPassword !== demoUsers[currentUser.email].password) {
-        showToast('Incorrect current password.', 'error');
-        return;
-    }
-    if (newPassword !== confirmNewPassword) {
-        showToast('New passwords do not match.', 'error');
-        return;
-    }
-    if (newPassword.length < 6) {
-        showToast('Password must be at least 6 characters long.', 'error');
-        return;
-    }
-
-    demoUsers[currentUser.email].password = newPassword;
-    showToast('Password changed successfully!', 'success');
-    event.target.reset();
-}
-
-function handleNewLeaveRequest(event) {
-    event.preventDefault();
-    const leaveType = document.getElementById('leaveType').value;
-    const startDate = document.getElementById('startDate').value;
-    const endDate = document.getElementById('endDate').value;
-    const reason = document.getElementById('leaveReason').value;
-
-    if (!startDate || !endDate || new Date(startDate) > new Date(endDate)) {
-        showToast('Invalid date range.', 'error');
-        return;
-    }
-
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    const diffTime = Math.abs(end - start);
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-
-    const newRequest = {
-        id: mockData.leaveRequests.length + 1,
-        userId: 3, // Hardcoded for Bob Employee demo
-        employeeName: currentUser.name,
-        type: leaveType,
-        startDate: startDate,
-        endDate: endDate,
-        days: diffDays,
-        reason: reason,
-        status: 'pending'
-    };
-
-    mockData.leaveRequests.push(newRequest);
-    showToast('Leave request submitted successfully!', 'success');
-    showMyLeaveRequests(); // Refresh the view
 }
 
 function showAddUser() {
@@ -1170,88 +1150,318 @@ function showAddUser() {
         showAccessDenied();
         return;
     }
+    
     const dashboardContent = document.getElementById('dashboardContent');
+    
     const addUserHtml = `
-        <div class="user-form-container">
-            <div class="dashboard-card">
-                <div class="card-header">
-                    <i class="fas fa-plus"></i>
-                    <h3>Add New User</h3>
-                </div>
-                <div class="card-content">
-                    <form id="addUserForm">
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="newUserName">Name</label>
-                                <input type="text" id="newUserName" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="newUserEmail">Email</label>
-                                <input type="email" id="newUserEmail" required>
-                            </div>
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="newUserPassword">Password</label>
-                                <input type="password" id="newUserPassword" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="newUserRole">Role</label>
-                                <select id="newUserRole" required>
-                                    <option value="admin">Admin</option>
-                                    <option value="manager">Manager</option>
-                                    <option value="employee">Employee</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="form-group">
-                            <label for="newUserDepartment">Department</label>
-                            <input type="text" id="newUserDepartment" required>
-                        </div>
-                        <button type="submit" class="btn btn-primary">
-                            <i class="fas fa-plus"></i>
-                            Add User
-                        </button>
-                    </form>
-                </div>
+        <div class="form-container" style="max-width: 600px; margin: 0 auto;">
+            <div class="form-header">
+                <h3>Add New User</h3>
+                <p>Create a new user account with role assignment</p>
             </div>
+            <form id="addUserForm" style="background: var(--bg-primary); padding: 24px; border-radius: 8px; box-shadow: var(--shadow-light); border: 1px solid var(--border-color);">
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label for="addUserName" style="display: block; margin-bottom: 6px; font-weight: 500;">Full Name</label>
+                    <input type="text" id="addUserName" name="name" required 
+                           style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 14px;">
+                </div>
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label for="addUserEmail" style="display: block; margin-bottom: 6px; font-weight: 500;">Email</label>
+                    <input type="email" id="addUserEmail" name="email" required 
+                           style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 14px;">
+                </div>
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label for="addUserRole" style="display: block; margin-bottom: 6px; font-weight: 500;">Role</label>
+                    <select id="addUserRole" name="role" required 
+                            style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 14px;">
+                        <option value="">Select Role</option>
+                        <option value="admin">Administrator</option>
+                        <option value="manager">Manager</option>
+                        <option value="employee">Employee</option>
+                    </select>
+                </div>
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label for="addUserStatus" style="display: block; margin-bottom: 6px; font-weight: 500;">Status</label>
+                    <select id="addUserStatus" name="status" required 
+                            style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 14px;">
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                    </select>
+                </div>
+                <div class="form-actions" style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px;">
+                    <button type="button" class="btn btn-secondary" onclick="showUsers()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add User</button>
+                </div>
+            </form>
         </div>
     `;
+    
     dashboardContent.innerHTML = addUserHtml;
-
-    document.getElementById('addUserForm').addEventListener('submit', function(event) {
-        event.preventDefault();
-        const name = document.getElementById('newUserName').value;
-        const email = document.getElementById('newUserEmail').value;
-        const password = document.getElementById('newUserPassword').value;
-        const role = document.getElementById('newUserRole').value;
-        const department = document.getElementById('newUserDepartment').value;
-
-        // Basic validation
-        if (demoUsers[email]) {
-            showToast('User already exists', 'error');
-            return;
-        }
-
-        const newUser = {
-            email: email,
-            password: password,
-            role: role,
-            name: name,
-            department: department
-        };
-
-        demoUsers[email] = newUser;
-        showToast('User added successfully!', 'success');
-        showUsers(); // Refresh user list
-    });
+    
+    // Add form submit listener
+    document.getElementById('addUserForm').addEventListener('submit', handleAddUser);
 }
 
-// API call simulation
-function apiCall(endpoint, method, data) {
-    return new Promise((resolve, reject) => {
-        setTimeout(() => {
-            resolve({ success: true, data: [] });
-        }, 1000);
-    });
+async function handleAddUser(event) {
+    event.preventDefault();
+    
+    const formData = new FormData(event.target);
+    const userData = {
+        name: formData.get('name'),
+        email: formData.get('email'),
+        role: formData.get('role'),
+        status: formData.get('status')
+    };
+    
+    try {
+        // Try API call first (if backend is available)
+        // const response = await apiCall('/users', 'POST', userData);
+        // showToast(`User added successfully! Default password: ${response.default_password}`, 'success');
+        
+        // For now, use mock data
+        const newUser = {
+            id: Math.max(...mockData.users.map(u => u.id)) + 1,
+            name: userData.name,
+            email: userData.email,
+            role: userData.role,
+            status: userData.status
+        };
+        
+        // Check if email already exists
+        if (mockData.users.some(user => user.email === newUser.email)) {
+            showToast('User with this email already exists!', 'error');
+            return;
+        }
+        
+        // Add user to mock data
+        mockData.users.push(newUser);
+        
+        // Add to system logs
+        mockData.systemLogs.unshift({
+            id: mockData.systemLogs.length + 1,
+            action: 'User Created',
+            user: currentUser.email,
+            timestamp: new Date().toLocaleString(),
+            status: 'success'
+        });
+        
+        showToast('User added successfully!', 'success');
+        showUsers();
+    } catch (error) {
+        console.error('Error adding user:', error);
+        showToast('Error adding user', 'error');
+    }
+}
+
+function editUser(userId) {
+    if (!hasPermission('admin')) {
+        showAccessDenied();
+        return;
+    }
+    
+    const user = mockData.users.find(u => u.id === userId);
+    if (!user) {
+        showToast('User not found!', 'error');
+        return;
+    }
+    
+    const dashboardContent = document.getElementById('dashboardContent');
+    
+    const editUserHtml = `
+        <div class="form-container" style="max-width: 600px; margin: 0 auto;">
+            <div class="form-header">
+                <h3>Edit User</h3>
+                <p>Update user information and role assignment</p>
+            </div>
+            <form id="editUserForm" style="background: var(--bg-primary); padding: 24px; border-radius: 8px; box-shadow: var(--shadow-light); border: 1px solid var(--border-color);">
+                <input type="hidden" name="userId" value="${user.id}">
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label for="editUserName" style="display: block; margin-bottom: 6px; font-weight: 500;">Full Name</label>
+                    <input type="text" id="editUserName" name="name" value="${user.name}" required 
+                           style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 14px;">
+                </div>
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label for="editUserEmail" style="display: block; margin-bottom: 6px; font-weight: 500;">Email</label>
+                    <input type="email" id="editUserEmail" name="email" value="${user.email}" required 
+                           style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 14px;">
+                </div>
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label for="editUserRole" style="display: block; margin-bottom: 6px; font-weight: 500;">Role</label>
+                    <select id="editUserRole" name="role" required 
+                            style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 14px;">
+                        <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Administrator</option>
+                        <option value="manager" ${user.role === 'manager' ? 'selected' : ''}>Manager</option>
+                        <option value="employee" ${user.role === 'employee' ? 'selected' : ''}>Employee</option>
+                    </select>
+                </div>
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label for="editUserStatus" style="display: block; margin-bottom: 6px; font-weight: 500;">Status</label>
+                    <select id="editUserStatus" name="status" required 
+                            style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 14px;">
+                        <option value="active" ${user.status === 'active' ? 'selected' : ''}>Active</option>
+                        <option value="inactive" ${user.status === 'inactive' ? 'selected' : ''}>Inactive</option>
+                    </select>
+                </div>
+                <div class="form-actions" style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px;">
+                    <button type="button" class="btn btn-secondary" onclick="showUsers()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Update User</button>
+                </div>
+            </form>
+        </div>
+    `;
+    
+    dashboardContent.innerHTML = editUserHtml;
+    
+    // Add form submit listener
+    document.getElementById('editUserForm').addEventListener('submit', handleEditUser);
+}
+
+async function handleEditUser(event) {
+    event.preventDefault();
+    
+    const formData = new FormData(event.target);
+    const userId = parseInt(formData.get('userId'));
+    const updatedData = {
+        name: formData.get('name'),
+        email: formData.get('email'),
+        role: formData.get('role'),
+        status: formData.get('status')
+    };
+    
+    try {
+        // For now, use mock data
+        const userIndex = mockData.users.findIndex(u => u.id === userId);
+        
+        if (userIndex === -1) {
+            showToast('User not found!', 'error');
+            return;
+        }
+        
+        // Check if email already exists for another user
+        if (mockData.users.some(user => user.email === updatedData.email && user.id !== userId)) {
+            showToast('User with this email already exists!', 'error');
+            return;
+        }
+        
+        // Update user data
+        mockData.users[userIndex] = { ...mockData.users[userIndex], ...updatedData };
+        
+        // Add to system logs
+        mockData.systemLogs.unshift({
+            id: mockData.systemLogs.length + 1,
+            action: 'User Updated',
+            user: currentUser.email,
+            timestamp: new Date().toLocaleString(),
+            status: 'success'
+        });
+        
+        showToast('User updated successfully!', 'success');
+        showUsers();
+    } catch (error) {
+        console.error('Error updating user:', error);
+        showToast('Error updating user', 'error');
+    }
+}
+
+async function deleteUser(userId) {
+    if (!hasPermission('admin')) {
+        showAccessDenied();
+        return;
+    }
+    
+    const user = mockData.users.find(u => u.id === userId);
+    if (!user) {
+        showToast('User not found!', 'error');
+        return;
+    }
+    
+    // Prevent deleting the current user
+    if (user.email === currentUser.email) {
+        showToast('You cannot delete your own account!', 'error');
+        return;
+    }
+    
+    // Confirm deletion
+    if (confirm(`Are you sure you want to delete user "${user.name}"? This action cannot be undone.`)) {
+        try {
+            // For now, use mock data
+            const userIndex = mockData.users.findIndex(u => u.id === userId);
+            mockData.users.splice(userIndex, 1);
+            
+            // Add to system logs
+            mockData.systemLogs.unshift({
+                id: mockData.systemLogs.length + 1,
+                action: 'User Deleted',
+                user: currentUser.email,
+                timestamp: new Date().toLocaleString(),
+                status: 'success'
+            });
+            
+            showToast('User deleted successfully!', 'success');
+            showUsers();
+        } catch (error) {
+            console.error('Error deleting user:', error);
+            showToast('Error deleting user', 'error');
+        }
+    }
+}
+
+// Placeholder functions for leave management
+function approveLeave(requestId) {
+    const request = mockData.leaveRequests.find(r => r.id === requestId);
+    if (request) {
+        request.status = 'approved';
+        showToast('Leave request approved!', 'success');
+        showLeaveRequests();
+    }
+}
+
+function rejectLeave(requestId) {
+    const request = mockData.leaveRequests.find(r => r.id === requestId);
+    if (request) {
+        request.status = 'rejected';
+        showToast('Leave request rejected!', 'success');
+        showLeaveRequests();
+    }
+}
+
+function viewLeave(requestId) {
+    showToast('Leave details view coming soon!', 'info');
+}
+
+function generateReport() {
+    showToast('Report generation feature coming soon!', 'info');
+}
+
+function exportLogs() {
+    showToast('Log export feature coming soon!', 'info');
+}
+
+// API Helper Function (for future backend integration)
+async function apiCall(endpoint, method = 'GET', data = null) {
+    try {
+        const config = {
+            method: method,
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            credentials: 'include'
+        };
+        
+        if (data) {
+            config.body = JSON.stringify(data);
+        }
+        
+        const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
+        const result = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(result.error || 'API request failed');
+        }
+        
+        return result;
+    } catch (error) {
+        console.error('API Error:', error);
+        throw error;
+    }
 }

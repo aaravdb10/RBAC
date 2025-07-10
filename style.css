@@ -596,6 +596,7 @@ body {
     min-height: 100vh;
     padding: 20px;
     background: var(--gradient-primary);
+    box-sizing: border-box;
 }
 
 .register-card {
@@ -604,14 +605,16 @@ body {
     box-shadow: var(--shadow-large);
     padding: 40px;
     width: 100%;
-    max-width: 500px;
+    max-width: 520px;
     box-sizing: border-box;
-    overflow: hidden; /* Prevents content from overflowing */
+    position: relative;
+    margin: auto;
 }
 
 .register-header {
     text-align: center;
     margin-bottom: 32px;
+    position: relative;
 }
 
 .register-header .logo {
@@ -636,6 +639,29 @@ body {
 .register-header .subtitle {
     color: var(--text-secondary);
     font-size: 16px;
+    margin-bottom: 16px;
+}
+
+.back-to-home {
+    position: absolute;
+    top: 0;
+    right: 0;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14px;
+}
+
+.back-to-home:hover {
+    color: var(--primary-color);
+    background: var(--bg-secondary);
 }
 
 .register-form {
@@ -648,23 +674,18 @@ body {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 16px;
-    width: 100%;
-    min-width: 0; /* Allows grid items to shrink below their intrinsic width */
 }
 
 .form-group {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    min-width: 0; /* Prevents overflow by allowing flexbox items to shrink */
 }
 
 .form-group label {
     font-weight: 500;
     color: var(--text-primary);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    font-size: 14px;
 }
 
 .form-group input,
@@ -673,40 +694,64 @@ body {
     border: 2px solid var(--border-color);
     border-radius: 8px;
     font-size: 16px;
-    transition: border-color 0.3s ease;
-    background: var(--bg-secondary);
+    transition: all 0.2s ease;
+    background: var(--bg-primary);
     color: var(--text-primary);
-    width: 100%;
-    min-width: 0; /* Prevents overflow */
-    box-sizing: border-box;
 }
 
 .form-group input:focus,
 .form-group select:focus {
     outline: none;
     border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+/* CAPTCHA Container Styling */
+.captcha-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    margin: 16px 0;
+}
+
+.captcha-container .g-recaptcha {
+    margin: 0 auto;
+    display: flex;
+    justify-content: center;
+}
+
+.captcha-container .form-text {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    text-align: center;
+    margin-top: 4px;
 }
 
 .register-btn {
     background: var(--gradient-primary);
     color: white;
     border: none;
-    padding: 14px 16px;
+    padding: 14px 24px;
     border-radius: 8px;
     font-size: 16px;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.3s ease;
+    transition: all 0.2s ease;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
-    margin-top: 16px;
+    margin-top: 8px;
 }
 
 .register-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-medium);
+}
+
+.register-btn:active {
+    transform: translateY(0);
 }
 
 .login-link {
@@ -718,12 +763,13 @@ body {
 
 .login-link p {
     color: var(--text-secondary);
+    font-size: 14px;
 }
 
 .login-link a {
     color: var(--primary-color);
     text-decoration: none;
-    font-weight: 600;
+    font-weight: 500;
 }
 
 .login-link a:hover {
@@ -781,6 +827,7 @@ body {
     min-height: 100vh;
     padding: 20px;
     background: var(--gradient-primary);
+    box-sizing: border-box;
 }
 
 .login-card {
@@ -789,12 +836,16 @@ body {
     box-shadow: var(--shadow-large);
     padding: 40px;
     width: 100%;
-    max-width: 450px;
+    max-width: 480px;
+    box-sizing: border-box;
+    position: relative;
+    margin: auto;
 }
 
 .login-header {
     text-align: center;
     margin-bottom: 32px;
+    position: relative;
 }
 
 .logo {

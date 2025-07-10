@@ -7,6 +7,10 @@
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- Added for secure password hashing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <!-- Added Google reCAPTCHA for brute force prevention - Replace with your actual site key in production -->
+    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
 </head>
 <body>
     <!-- Toast notification container -->
@@ -248,15 +252,15 @@
     <div class="register-container" id="registerPage" style="display: none;">
         <div class="register-card">
             <div class="register-header">
+                <button class="back-to-home" onclick="showHomePage()">
+                    <i class="fas fa-arrow-left"></i>
+                    Back to Home
+                </button>
                 <div class="logo">
                     <i class="fas fa-shield-alt"></i>
                     <h1>Create Account</h1>
                 </div>
                 <p class="subtitle">Join SecureFlow RBAC System</p>
-                <button class="back-to-home" onclick="showHomePage()">
-                    <i class="fas fa-arrow-left"></i>
-                    Back to Home
-                </button>
             </div>
 
             <form class="register-form" id="registerForm">
@@ -298,6 +302,12 @@
                     </select>
                 </div>
 
+                <!-- Google reCAPTCHA for registration security -->
+                <div class="form-group captcha-container">
+                    <div class="g-recaptcha" data-sitekey="6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI"></div>
+                    <small class="form-text text-muted">This helps prevent automated registrations.</small>
+                </div>
+                
                 <button type="submit" class="register-btn">
                     <i class="fas fa-user-plus"></i>
                     Create Account
@@ -314,15 +324,15 @@
     <div class="login-container" id="loginPage" style="display: none;">
         <div class="login-card">
             <div class="login-header">
+                <button class="back-to-home" onclick="showHomePage()">
+                    <i class="fas fa-arrow-left"></i>
+                    Back to Home
+                </button>
                 <div class="logo">
                     <i class="fas fa-shield-alt"></i>
                     <h1>Welcome Back</h1>
                 </div>
                 <p class="subtitle">Sign in to SecureFlow RBAC System</p>
-                <button class="back-to-home" onclick="showHomePage()">
-                    <i class="fas fa-arrow-left"></i>
-                    Back to Home
-                </button>
             </div>
 
             <form class="login-form" id="loginForm">
@@ -343,6 +353,12 @@
                     </div>
                 </div>
 
+                <!-- Google reCAPTCHA for brute force prevention -->
+                <div class="form-group captcha-container">
+                    <div class="g-recaptcha" data-sitekey="6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI"></div>
+                    <small class="form-text text-muted">This helps prevent automated login attempts.</small>
+                </div>
+                
                 <button type="submit" class="login-btn">
                     <i class="fas fa-sign-in-alt"></i>
                     Sign In
