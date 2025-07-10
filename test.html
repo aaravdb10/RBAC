@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>JavaScript Test</title>
+</head>
+<body>
+    <h1>Testing JavaScript Functions</h1>
+    <div id="results"></div>
+    
+    <script>
+        // Test if the functions exist by importing the script
+        fetch('/script.js')
+            .then(response => response.text())
+            .then(code => {
+                // Check for function definitions
+                const functions = [
+                    'initializeApp',
+                    'showHomePage', 
+                    'showLoginPage',
+                    'setupEventListeners',
+                    'handleLogin',
+                    'demoLogin'
+                ];
+                
+                const results = [];
+                functions.forEach(func => {
+                    if (code.includes(`function ${func}`)) {
+                        results.push(`✅ ${func} is defined`);
+                    } else {
+                        results.push(`❌ ${func} is missing`);
+                    }
+                });
+                
+                document.getElementById('results').innerHTML = results.join('<br>');
+            })
+            .catch(err => {
+                document.getElementById('results').innerHTML = `Error: ${err}`;
+            });
+    </script>
+</body>
+</html>

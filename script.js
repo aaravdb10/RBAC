@@ -5,6 +5,8 @@
 let currentUser = null;
 let currentRole = null;
 let isDarkMode = false;
+let loginAttempts = 0;
+let cooldownEndTime = null;
 const API_BASE_URL = 'http://localhost:5000/api';
 
 // Mock Data for demonstration
@@ -59,6 +61,7 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('DOM loaded, initializing app...');
     initializeDarkMode();
     setupEventListeners();
+    initializeCooldown();
     checkExistingSession();
 });
 
@@ -113,6 +116,7 @@ function showLoginPage() {
     console.log('Showing login page');
     hideAllPages();
     document.getElementById('loginPage').style.display = 'block';
+    checkCooldownStatus();
 }
 
 function showDashboardPage() {
@@ -239,6 +243,20 @@ function demoLogin(role) {
 function handleLogin(event) {
     event.preventDefault();
     
+    // Check if in cooldown
+    if (cooldownEndTime && Date.now() < cooldownEndTime) {
+        const remainingTime = Math.ceil((cooldownEndTime - Date.now()) / 1000 / 60);
+        showToast(`Please wait ${remainingTime} minute(s) before trying again`, 'error');
+        return;
+    }
+    
+    // Validate CAPTCHA checkbox
+    const captchaChecked = document.getElementById('captchaAnswer').checked;
+    if (!captchaChecked) {
+        showToast('Please verify that you are not a robot', 'error');
+        return;
+    }
+
     const formData = new FormData(event.target);
     const email = formData.get('email');
     const password = formData.get('password');
@@ -251,6 +269,12 @@ function handleLogin(event) {
         currentUser = user;
         currentRole = user.role;
         
+        // Reset login attempts on success
+        loginAttempts = 0;
+        cooldownEndTime = null;
+        localStorage.removeItem('cooldownEndTime');
+        hideCooldownMessage();
+        
         // Save to localStorage
         localStorage.setItem('currentUser', JSON.stringify(user));
         localStorage.setItem('currentRole', user.role);
@@ -258,14 +282,29 @@ function handleLogin(event) {
         showToast(`Welcome back, ${user.name}!`, 'success');
         showDashboardPage();
     } else {
-        showToast('Invalid email or password', 'error');
+        loginAttempts++;
+        
+        if (loginAttempts >= 3) {
+            startCooldown();
+            showToast('Too many failed attempts. Account locked for 5 minutes.', 'error');
+        } else {
+            showToast(`Invalid email or password. Attempt ${loginAttempts}/3`, 'error');
+        }
     }
 }
 
 // Handle register form submission
 function handleRegister(event) {
     event.preventDefault();
-    
+    // Validate CAPTCHA
+    const regCaptcha = document.getElementById('captchaRegAnswer');
+    const expectedReg = parseInt(regCaptcha.dataset.expected, 10);
+    if (parseInt(regCaptcha.value, 10) !== expectedReg) {
+        showToast('Incorrect captcha answer', 'error');
+        generateCaptchaRegister();
+        return;
+    }
+
     const formData = new FormData(event.target);
     const userData = {
         firstName: formData.get('firstName'),
@@ -714,8 +753,9 @@ function showLeaveRequests() {
         showAccessDenied();
         return;
     }
-    
-    setActiveNavLink(3);
+    // Highlight correct nav link: admin=3, manager=2
+    const idx = currentRole === 'admin' ? 3 : 2;
+    setActiveNavLink(idx);
     const dashboardContent = document.getElementById('dashboardContent');
     
     const leaveHtml = `
@@ -781,19 +821,195 @@ function showLeaveRequests() {
 
 // Placeholder functions for other navigation items
 function showTeam() {
-    showToast('Team management feature coming soon!', 'info');
+    if (!hasPermission('manager')) { showAccessDenied(); return; }
+    // Manager or admin view team members
+    setActiveNavLink(currentRole === 'admin' ? 1 : 1);
+    const dashboardContent = document.getElementById('dashboardContent');
+    const teamMembers = mockData.users.filter(u => u.role === 'employee');
+    let html = `<div class="table-container">
+        <div class="table-header"><h3>Team Members</h3></div>
+        <table class="table"><thead><tr><th>Name</th><th>Email</th><th>Status</th></tr></thead><tbody>`;
+    teamMembers.forEach(m => {
+        html += `<tr><td>${m.name}</td><td>${m.email}</td><td><span class="status-badge status-${m.status}">${m.status}</span></td></tr>`;
+    });
+    html += `</tbody></table></div>`;
+    dashboardContent.innerHTML = html;
 }
 
 function showReports() {
-    showToast('Reports feature coming soon!', 'info');
+    if (!hasPermission(currentRole === 'admin' ? 'admin' : 'manager')) { showAccessDenied(); return; }
+    const idx = currentRole === 'admin' ? 4 : 3;
+    setActiveNavLink(idx);
+    const dashboardContent = document.getElementById('dashboardContent');
+    // Aggregate leave requests per employee
+    const reportData = {};
+    mockData.leaveRequests.forEach(r => {
+        if (!reportData[r.employeeName]) {
+            reportData[r.employeeName] = { total: 0, approved: 0, pending: 0, rejected: 0 };
+        }
+        reportData[r.employeeName].total++;
+        reportData[r.employeeName][r.status]++;
+    });
+    // Build HTML table
+    let reportHtml = `
+      <div class="table-container">
+        <div class="table-header"><h3>Leave Report by Employee</h3></div>
+        <table class="table">
+          <thead><tr>
+            <th>Employee</th><th>Total</th><th>Approved</th><th>Pending</th><th>Rejected</th>
+          </tr></thead>
+          <tbody>`;
+    Object.keys(reportData).forEach(name => {
+        const d = reportData[name];
+        reportHtml += `<tr>
+            <td>${name}</td>
+            <td>${d.total}</td>
+            <td>${d.approved}</td>
+            <td>${d.pending}</td>
+            <td>${d.rejected}</td>
+          </tr>`;
+    });
+    reportHtml += `</tbody></table></div>`;
+    dashboardContent.innerHTML = reportHtml;
 }
 
 function showProfile() {
-    showToast('Profile management feature coming soon!', 'info');
+    // User edits own profile
+    setActiveNavLink(currentRole === 'employee' ? 1 : 1);
+    const dashboardContent = document.getElementById('dashboardContent');
+    dashboardContent.innerHTML = `
+    <div class="form-container" style="max-width: 600px; margin:0 auto;">
+      <div class="form-header"><h3>Edit Profile</h3></div>
+      <form id="profileForm" style="background:var(--bg-primary); padding:24px; border-radius:8px; box-shadow:var(--shadow-light);">
+        <div class="form-group"><label>Name</label><input type="text" name="name" value="${currentUser.name}" required></div>
+        <div class="form-group"><label>Department</label><input type="text" name="department" value="${currentUser.department}" required></div>
+        <div class="form-actions" style="margin-top:16px;"><button type="submit" class="btn btn-primary">Update</button></div>
+      </form>
+    </div>`;
+    document.getElementById('profileForm').addEventListener('submit', handleProfileUpdate);
+}
+
+function handleProfileUpdate(event) {
+    event.preventDefault();
+    const data = new FormData(event.target);
+    currentUser.name = data.get('name');
+    currentUser.department = data.get('department');
+    // Update mock data
+    const userObj = mockData.users.find(u => u.email === currentUser.email);
+    if (userObj) { userObj.name = currentUser.name; userObj.department = currentUser.department; }
+    showToast('Profile updated!', 'success');
+    showProfile();
 }
 
 function showMyLeaveRequests() {
-    showToast('Leave request feature coming soon!', 'info');
+    setActiveNavLink(currentRole === 'employee' ? 2 : 2);
+    const dashboardContent = document.getElementById('dashboardContent');
+    dashboardContent.innerHTML = `
+      <div class="form-container" style="max-width:600px;margin:0 auto;">
+        <div class="form-header"><h3>Request New Leave</h3></div>
+        <form id="leaveForm" style="background:var(--bg-primary); padding:24px; border-radius:8px; box-shadow:var(--shadow-light);">
+          <div class="form-group"><label>Type</label><select name="type" required><option value="vacation">Vacation</option><option value="sick">Sick</option><option value="personal">Personal</option></select></div>
+          <div class="form-group"><label>Start Date</label><input type="date" name="startDate" required></div>
+          <div class="form-group"><label>End Date</label><input type="date" name="endDate" required></div>
+          <div class="form-group"><label>Reason</label><textarea name="reason" required></textarea></div>
+          <div class="form-actions" style="margin-top:16px;"><button type="submit" class="btn btn-primary">Submit</button></div>
+        </form>
+      </div>`;
+    document.getElementById('leaveForm').addEventListener('submit', handleLeaveRequest);
+}
+
+function handleLeaveRequest(event) {
+    event.preventDefault();
+    const f = new FormData(event.target);
+    const req = {
+      id: mockData.leaveRequests.length + 1,
+      userId: currentUser.id || 0,
+      employeeName: currentUser.name,
+      type: f.get('type'),
+      startDate: f.get('startDate'),
+      endDate: f.get('endDate'),
+      days: Math.max(1, (new Date(f.get('endDate')) - new Date(f.get('startDate')))/(1000*60*60*24) + 1),
+      reason: f.get('reason'),
+      status: 'pending'
+    };
+    mockData.leaveRequests.push(req);
+    showToast('Leave request submitted!', 'success');
+    showLeaveRequests();
+}
+
+// Cooldown and brute force protection
+function checkCooldownStatus() {
+    if (cooldownEndTime && Date.now() < cooldownEndTime) {
+        const remainingTime = Math.ceil((cooldownEndTime - Date.now()) / 1000 / 60);
+        showCooldownMessage(remainingTime);
+        disableLoginForm(true);
+    } else {
+        cooldownEndTime = null;
+        loginAttempts = 0;
+        hideCooldownMessage();
+        disableLoginForm(false);
+    }
+}
+
+function showCooldownMessage(minutes) {
+    const loginForm = document.getElementById('loginForm');
+    let cooldownDiv = document.querySelector('.cooldown-message');
+    
+    if (!cooldownDiv) {
+        cooldownDiv = document.createElement('div');
+        cooldownDiv.className = 'cooldown-message';
+        loginForm.insertBefore(cooldownDiv, loginForm.firstChild);
+    }
+    
+    cooldownDiv.innerHTML = `
+        <i class="fas fa-clock"></i>
+        Too many failed login attempts. Please try again in ${minutes} minute(s).
+    `;
+}
+
+function hideCooldownMessage() {
+    const cooldownDiv = document.querySelector('.cooldown-message');
+    if (cooldownDiv) {
+        cooldownDiv.remove();
+    }
+}
+
+function disableLoginForm(disabled) {
+    const loginBtn = document.querySelector('.login-btn');
+    const inputs = document.querySelectorAll('#loginForm input');
+    
+    if (disabled) {
+        loginBtn.disabled = true;
+        loginBtn.style.opacity = '0.5';
+        loginBtn.style.cursor = 'not-allowed';
+        inputs.forEach(input => input.disabled = true);
+    } else {
+        loginBtn.disabled = false;
+        loginBtn.style.opacity = '1';
+        loginBtn.style.cursor = 'pointer';
+        inputs.forEach(input => input.disabled = false);
+    }
+}
+
+function startCooldown() {
+    cooldownEndTime = Date.now() + (5 * 60 * 1000); // 5 minutes
+    localStorage.setItem('cooldownEndTime', cooldownEndTime.toString());
+    checkCooldownStatus();
+}
+
+// Initialize cooldown from localStorage
+function initializeCooldown() {
+    const savedCooldown = localStorage.getItem('cooldownEndTime');
+    if (savedCooldown) {
+        cooldownEndTime = parseInt(savedCooldown);
+        if (Date.now() < cooldownEndTime) {
+            // Still in cooldown
+        } else {
+            // Cooldown expired, clear it
+            localStorage.removeItem('cooldownEndTime');
+            cooldownEndTime = null;
+        }
+    }
 }
 
 // Permission checking
@@ -1175,15 +1391,44 @@ function rejectLeave(requestId) {
 }
 
 function viewLeave(requestId) {
-    showToast('Leave details view coming soon!', 'info');
+    const request = mockData.leaveRequests.find(r => r.id === requestId);
+    if (!request) {
+        showToast('Leave request not found', 'error');
+        return;
+    }
+    // Show details in alert or modal
+    const details = `Employee: ${request.employeeName}\nType: ${request.type}\nStart Date: ${request.startDate}\nEnd Date: ${request.endDate}\nDays: ${request.days}\nReason: ${request.reason || 'N/A'}\nStatus: ${request.status}`;
+    alert(details);
 }
 
 function generateReport() {
-    showToast('Report generation feature coming soon!', 'info');
-}
-
-function exportLogs() {
-    showToast('Log export feature coming soon!', 'info');
+    if (!mockData.leaveRequests || mockData.leaveRequests.length === 0) {
+        showToast('No leave requests to include in report', 'warning');
+        return;
+    }
+    // Build CSV content
+    const headers = ['Employee','Type','Start Date','End Date','Days','Status'];
+    const rows = mockData.leaveRequests.map(r => [
+        r.employeeName,
+        r.type,
+        r.startDate,
+        r.endDate,
+        r.days,
+        r.status
+    ]);
+    let csv = headers.join(',') + '\n';
+    rows.forEach(row => { csv += row.join(',') + '\n'; });
+    // Download as CSV
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'leave_requests_report.csv';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showToast('Report downloaded', 'success');
 }
 
 // API Helper Function (for future backend integration)
