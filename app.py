@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import sqlite3
 import hashlib
@@ -57,7 +57,8 @@ def init_database():
         ('Employee', 'User', 'employee@company.com', 'employee123', 'employee', 'Finance'),
         ('John', 'Doe', 'john.doe@company.com', 'password123', 'employee', 'IT'),
         ('Jane', 'Smith', 'jane.smith@company.com', 'password123', 'manager', 'Marketing'),
-        ('Bob', 'Johnson', 'bob.johnson@company.com', 'password123', 'employee', 'Operations')
+        ('Bob', 'Johnson', 'bob.johnson@company.com', 'password123', 'employee', 'Operations'),
+        ('Aarav', 'Gandhi', 'aaravdb10@gmail.com', '123', 'admin', 'IT'),
     ]
     
     for user in demo_users:
