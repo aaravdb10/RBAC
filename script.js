@@ -1087,27 +1087,30 @@ function closeAccessDeniedModal() {
 function showToast(message, type = 'info') {
     const container = document.getElementById('toast-container');
     if (!container) return;
-    
+    // Remove any existing toast (so only one is ever visible)
+    while (container.firstChild) {
+        container.removeChild(container.firstChild);
+    }
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
-    
     const icon = type === 'success' ? 'fa-check-circle' : 
                  type === 'error' ? 'fa-exclamation-circle' :
                  type === 'warning' ? 'fa-exclamation-triangle' : 'fa-info-circle';
-    
     toast.innerHTML = `
         <i class="fas ${icon}"></i>
         <span>${message}</span>
+        <button class="toast-close" style="background:none;border:none;position:absolute;top:8px;right:12px;font-size:18px;color:inherit;cursor:pointer;">&times;</button>
     `;
-    
+    // Dismiss on click (anywhere on toast or close button)
+    toast.addEventListener('click', () => {
+        if (toast.parentNode) toast.parentNode.removeChild(toast);
+    });
+    toast.querySelector('.toast-close').addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (toast.parentNode) toast.parentNode.removeChild(toast);
+    });
     container.appendChild(toast);
-    
-    // Auto remove after 3 seconds
-    setTimeout(() => {
-        if (toast.parentNode) {
-            toast.parentNode.removeChild(toast);
-        }
-    }, 3000);
+    // No auto-remove: stays until user clicks
 }
 
 // Logout function
