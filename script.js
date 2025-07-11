@@ -860,8 +860,80 @@ function showReports() {
 
     // For manager, show only team and leave stats, with enhanced visuals
     if (currentRole === 'manager') {
-        // ...existing code for manager...
-        // (no change for manager reports)
+        // Manager-specific report: show team and leave stats with a unique UI and horizontal bar chart
+        const teamMembers = mockData.users.filter(u => u.role === 'employee');
+        const teamCount = teamMembers.length;
+        const pendingLeaves = mockData.leaveRequests.filter(r => r.status === 'pending').length;
+        const approvedLeaves = mockData.leaveRequests.filter(r => r.status === 'approved').length;
+        const rejectedLeaves = mockData.leaveRequests.filter(r => r.status === 'rejected').length;
+        const totalLeaves = mockData.leaveRequests.length;
+        const leaveData = [
+            { label: 'Pending', value: pendingLeaves, color: 'var(--warning-color)' },
+            { label: 'Approved', value: approvedLeaves, color: 'var(--success-color)' },
+            { label: 'Rejected', value: rejectedLeaves, color: 'var(--danger-color)' }
+        ];
+        const maxValue = Math.max(...leaveData.map(d => d.value), 1);
+        function horizontalBar(val, max, color) {
+            const percent = (val / max) * 100;
+            return `<div style="background:var(--bg-secondary);border-radius:6px;height:28px;display:flex;align-items:center;margin-bottom:12px;">
+                <div style="height:100%;width:${percent}%;background:${color};border-radius:6px 0 0 6px;transition:width .5s;"></div>
+                <div style="position:absolute;margin-left:12px;font-weight:600;color:var(--text-primary);">${val}</div>
+            </div>`;
+        }
+        dashboardContent.innerHTML = `
+            <div class="manager-report" style="max-width:900px;margin:0 auto;">
+                <h2 style="margin-bottom:18px;text-align:left;color:var(--primary-color);font-size:2rem;">Team Insights</h2>
+                <div style="display:flex;gap:32px;flex-wrap:wrap;align-items:flex-start;">
+                    <div style="flex:2;min-width:320px;background:var(--bg-primary);border-radius:12px;padding:28px 24px;box-shadow:0 2px 8px #0001;">
+                        <h3 style="margin-bottom:18px;color:var(--primary-color);font-size:1.2rem;">Leave Status (All Employees)</h3>
+                        <div style="position:relative;">
+                            ${leaveData.map(d => `
+                                <div style="display:flex;align-items:center;gap:16px;position:relative;">
+                                    <span style="width:90px;display:inline-block;font-weight:500;">${d.label}</span>
+                                    <div style="flex:1;position:relative;">${horizontalBar(d.value, maxValue, d.color)}</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                        <div style="margin-top:18px;text-align:right;">
+                            <button class="btn btn-primary btn-sm" onclick="generateReport()">
+                                <i class="fas fa-download"></i> Download Leave Report (CSV)
+                            </button>
+                        </div>
+                    </div>
+                    <div style="flex:1;min-width:220px;background:var(--bg-secondary);border-radius:12px;padding:24px 18px;box-shadow:0 1px 4px #0001;">
+                        <h3 style="margin-bottom:14px;color:var(--primary-color);font-size:1.1rem;">Team Members</h3>
+                        <ul style="list-style:none;padding:0;margin:0;">
+                            ${teamMembers.map(u => `
+                                <li style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+                                    <div style="width:32px;height:32px;background:var(--bg-primary);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.1rem;color:var(--primary-color);">
+                                        <i class="fas fa-user"></i>
+                                    </div>
+                                    <div style="flex:1;">
+                                        <div style="font-weight:500;">${u.name}</div>
+                                        <div style="font-size:12px;color:var(--text-secondary);">${u.email}</div>
+                                    </div>
+                                    <span class="status-badge status-${u.status}">${u.status}</span>
+                                </li>
+                            `).join('')}
+                        </ul>
+                        <div style="margin-top:18px;text-align:right;">
+                            <span style="font-size:13px;color:var(--text-secondary);">Total: <b>${teamCount}</b></span>
+                        </div>
+                    </div>
+                </div>
+                <div style="background:var(--bg-secondary);border-radius:10px;padding:18px 16px;margin:32px 0 18px 0;box-shadow:0 1px 4px #0001;">
+                    <h3 style="margin-bottom:12px;color:var(--primary-color);">Recent System Activity</h3>
+                    <ul style="margin:8px 0 0 18px;">
+                        ${mockData.systemLogs.slice(0,7).map(log => `<li>${log.timestamp}: <b>${log.action}</b> by <span style='color:var(--primary-color);'>${log.user}</span> <span class='status-badge status-${log.status}'>${log.status}</span></li>`).join('')}
+                    </ul>
+                </div>
+                <div style="text-align:right;">
+                    <button class="btn btn-primary btn-sm" onclick="exportLogs()">
+                        <i class="fas fa-download"></i> Download System Logs (CSV)
+                    </button>
+                </div>
+            </div>
+        `;
     } else {
         // Enhanced Admin report
         const adminCount = mockData.users.filter(u => u.role === 'admin').length;
