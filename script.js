@@ -744,8 +744,12 @@ function showLeaveRequests() {
     }
     
     setupNavigation();
-    setActiveNavLink(3);
-    currentNavIndex = 3;
+    // For admin: Dashboard(0), Users(1), System Logs(2), Leave Requests(3), Reports(4)
+    // For manager: Dashboard(0), Team(1), Leave Requests(2), Reports(3)
+    let idx = 3;
+    if (currentRole === 'manager') idx = 2;
+    setActiveNavLink(idx);
+    currentNavIndex = idx;
     const dashboardContent = document.getElementById('dashboardContent');
     
     const leaveHtml = `
@@ -845,59 +849,135 @@ function showTeam() {
 
 function showReports() {
     setupNavigation();
-    // For admin: index 4, for manager: index 2
+    // For admin: Dashboard(0), Users(1), System Logs(2), Leave Requests(3), Reports(4)
+    // For manager: Dashboard(0), Team(1), Leave Requests(2), Reports(3)
     let idx = 4;
-    if (currentRole === 'manager') idx = 2;
+    if (currentRole === 'manager') idx = 3;
     setActiveNavLink(idx);
     currentNavIndex = idx;
-    // Show a simple report summary
     const dashboardContent = document.getElementById('dashboardContent');
     if (!dashboardContent) return;
-    // User counts by role
-    const adminCount = mockData.users.filter(u => u.role === 'admin').length;
-    const managerCount = mockData.users.filter(u => u.role === 'manager').length;
-    const employeeCount = mockData.users.filter(u => u.role === 'employee').length;
-    // Leave stats
-    const totalLeaves = mockData.leaveRequests.length;
-    const pendingLeaves = mockData.leaveRequests.filter(r => r.status === 'pending').length;
-    const approvedLeaves = mockData.leaveRequests.filter(r => r.status === 'approved').length;
-    const rejectedLeaves = mockData.leaveRequests.filter(r => r.status === 'rejected').length;
-    dashboardContent.innerHTML = `
-        <div class="report-summary" style="max-width:600px;margin:0 auto;">
-            <h3 style="margin-bottom:18px;">System Reports</h3>
-            <div style="margin-bottom:16px;">
-                <strong>User Counts:</strong>
-                <ul style="margin:8px 0 0 18px;">
-                    <li>Admins: ${adminCount}</li>
-                    <li>Managers: ${managerCount}</li>
-                    <li>Employees: ${employeeCount}</li>
-                </ul>
+
+    // For manager, show only team and leave stats, with enhanced visuals
+    if (currentRole === 'manager') {
+        // Team members (employees)
+        const teamMembers = mockData.users.filter(u => u.role === 'employee');
+        // Leave stats for team
+        const teamLeaves = mockData.leaveRequests.filter(r => teamMembers.some(u => u.id === r.userId));
+        const totalLeaves = teamLeaves.length;
+        const pendingLeaves = teamLeaves.filter(r => r.status === 'pending').length;
+        const approvedLeaves = teamLeaves.filter(r => r.status === 'approved').length;
+        const rejectedLeaves = teamLeaves.filter(r => r.status === 'rejected').length;
+
+        // Bar chart data (simple HTML/CSS, no external lib)
+        const maxBar = Math.max(pendingLeaves, approvedLeaves, rejectedLeaves, 1);
+        function bar(width, color) {
+            return `<div style="height:18px;background:${color};width:${width}%;border-radius:4px;"></div>`;
+        }
+
+        dashboardContent.innerHTML = `
+            <div class="report-summary" style="max-width:700px;margin:0 auto;">
+                <h3 style="margin-bottom:18px;">Team Reports</h3>
+                <div style="margin-bottom:24px;">
+                    <strong>Team & Leave Statistics:</strong>
+                    <table style="width:100%;margin-top:10px;border-collapse:collapse;background:var(--bg-secondary);border-radius:8px;overflow:hidden;box-shadow:0 1px 4px #0001;">
+                        <thead>
+                            <tr style="background:var(--primary-color);color:#fff;">
+                                <th style="padding:10px 8px;">Total Employees</th>
+                                <th style="padding:10px 8px;">Total Leaves</th>
+                                <th style="padding:10px 8px;">Pending</th>
+                                <th style="padding:10px 8px;">Approved</th>
+                                <th style="padding:10px 8px;">Rejected</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr style="text-align:center;">
+                                <td style="padding:8px;">${teamMembers.length}</td>
+                                <td style="padding:8px;">${totalLeaves}</td>
+                                <td style="padding:8px;">${pendingLeaves}</td>
+                                <td style="padding:8px;">${approvedLeaves}</td>
+                                <td style="padding:8px;">${rejectedLeaves}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div style="margin-bottom:24px;">
+                    <strong>Leave Status Overview:</strong>
+                    <div style="margin-top:12px;display:flex;align-items:center;gap:18px;">
+                        <div style="width:120px;">Pending</div>
+                        <div style="flex:1;">${bar((pendingLeaves/maxBar)*100, 'var(--warning-color)')}</div>
+                        <div style="width:40px;text-align:right;">${pendingLeaves}</div>
+                    </div>
+                    <div style="margin-top:8px;display:flex;align-items:center;gap:18px;">
+                        <div style="width:120px;">Approved</div>
+                        <div style="flex:1;">${bar((approvedLeaves/maxBar)*100, 'var(--success-color)')}</div>
+                        <div style="width:40px;text-align:right;">${approvedLeaves}</div>
+                    </div>
+                    <div style="margin-top:8px;display:flex;align-items:center;gap:18px;">
+                        <div style="width:120px;">Rejected</div>
+                        <div style="flex:1;">${bar((rejectedLeaves/maxBar)*100, 'var(--danger-color)')}</div>
+                        <div style="width:40px;text-align:right;">${rejectedLeaves}</div>
+                    </div>
+                </div>
+                <div style="margin-bottom:16px;">
+                    <button class="btn btn-primary btn-sm" onclick="generateReport()" style="margin-top:10px;">
+                        <i class="fas fa-download"></i> Download Leave Report (CSV)
+                    </button>
+                </div>
+                <div style="margin-bottom:16px;">
+                    <strong>Recent Activity:</strong>
+                    <ul style="margin:8px 0 0 18px;">
+                        ${mockData.systemLogs.slice(0,5).map(log => `<li>${log.timestamp}: ${log.action} by ${log.user} (${log.status})</li>`).join('')}
+                    </ul>
+                </div>
             </div>
-            <div style="margin-bottom:16px;">
-                <strong>Leave Requests:</strong>
-                <ul style="margin:8px 0 0 18px;">
-                    <li>Total: ${totalLeaves}</li>
-                    <li>Pending: ${pendingLeaves}</li>
-                    <li>Approved: ${approvedLeaves}</li>
-                    <li>Rejected: ${rejectedLeaves}</li>
-                </ul>
-                <button class="btn btn-primary btn-sm" onclick="generateReport()" style="margin-top:10px;">
-                    <i class="fas fa-download"></i> Download Leave Report (CSV)
-                </button>
+        `;
+    } else {
+        // Admin report (existing)
+        const adminCount = mockData.users.filter(u => u.role === 'admin').length;
+        const managerCount = mockData.users.filter(u => u.role === 'manager').length;
+        const employeeCount = mockData.users.filter(u => u.role === 'employee').length;
+        const totalLeaves = mockData.leaveRequests.length;
+        const pendingLeaves = mockData.leaveRequests.filter(r => r.status === 'pending').length;
+        const approvedLeaves = mockData.leaveRequests.filter(r => r.status === 'approved').length;
+        const rejectedLeaves = mockData.leaveRequests.filter(r => r.status === 'rejected').length;
+        dashboardContent.innerHTML = `
+            <div class="report-summary" style="max-width:600px;margin:0 auto;">
+                <h3 style="margin-bottom:18px;">System Reports</h3>
+                <div style="margin-bottom:16px;">
+                    <strong>User Counts:</strong>
+                    <ul style="margin:8px 0 0 18px;">
+                        <li>Admins: ${adminCount}</li>
+                        <li>Managers: ${managerCount}</li>
+                        <li>Employees: ${employeeCount}</li>
+                    </ul>
+                </div>
+                <div style="margin-bottom:16px;">
+                    <strong>Leave Requests:</strong>
+                    <ul style="margin:8px 0 0 18px;">
+                        <li>Total: ${totalLeaves}</li>
+                        <li>Pending: ${pendingLeaves}</li>
+                        <li>Approved: ${approvedLeaves}</li>
+                        <li>Rejected: ${rejectedLeaves}</li>
+                    </ul>
+                    <button class="btn btn-primary btn-sm" onclick="generateReport()" style="margin-top:10px;">
+                        <i class="fas fa-download"></i> Download Leave Report (CSV)
+                    </button>
+                </div>
+                <div style="margin-bottom:16px;">
+                    <strong>Recent Activity:</strong>
+                    <ul style="margin:8px 0 0 18px;">
+                        ${mockData.systemLogs.slice(0,5).map(log => `<li>${log.timestamp}: ${log.action} by ${log.user} (${log.status})</li>`).join('')}
+                    </ul>
+                </div>
+                <div style="margin-bottom:16px;">
+                    <button class="btn btn-primary btn-sm" onclick="exportLogs()">
+                        <i class="fas fa-download"></i> Download System Logs (CSV)
+                    </button>
+                </div>
             </div>
-            <div style="margin-bottom:16px;">
-                <strong>Recent Activity:</strong>
-                <ul style="margin:8px 0 0 18px;">
-                    ${mockData.systemLogs.slice(0,5).map(log => `<li>${log.timestamp}: ${log.action} by ${log.user} (${log.status})</li>`).join('')}
-                </ul>
-            </div>
-            <div style="margin-bottom:16px;">
-                <button class="btn btn-primary btn-sm" onclick="exportLogs()">
-                    <i class="fas fa-download"></i> Download System Logs (CSV)
-                </button>
-            </div>
-        </div>
-    `;
+        `;
+    }
 }
 
 function showProfile() {
@@ -954,8 +1034,11 @@ function handleEditProfile(event) {
 
 function showMyLeaveRequests() {
     setupNavigation();
-    setActiveNavLink(2);
-    currentNavIndex = 2;
+    // For employee: Dashboard(0), Profile(1), My Leaves(2)
+    let idx = 2;
+    if (currentRole === 'manager') idx = 3; // Defensive, but manager shouldn't see this
+    setActiveNavLink(idx);
+    currentNavIndex = idx;
     // Show user's leave requests and allow new leave request
     const dashboardContent = document.getElementById('dashboardContent');
     if (!dashboardContent || !currentUser) return;
