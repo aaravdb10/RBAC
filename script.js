@@ -70,7 +70,7 @@ function initializeDarkMode() {
         document.documentElement.setAttribute('data-theme', 'dark');
         updateDarkModeIcon();
     }
-}
+} // close initializeDarkMode
 
 // Toggle dark mode
 function toggleDarkMode() {
@@ -789,11 +789,169 @@ function showReports() {
 }
 
 function showProfile() {
-    showToast('Profile management feature coming soon!', 'info');
+    // Show profile management form for the current user
+    const dashboardContent = document.getElementById('dashboardContent');
+    if (!dashboardContent || !currentUser) return;
+    dashboardContent.innerHTML = `
+        <div class="form-container" style="max-width: 500px; margin: 0 auto;">
+            <div class="form-header">
+                <h3>Edit Profile</h3>
+                <p>Update your personal information</p>
+            </div>
+            <form id="editProfileForm" style="background: var(--bg-primary); padding: 24px; border-radius: 8px; box-shadow: var(--shadow-light); border: 1px solid var(--border-color);">
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label for="profileName" style="display: block; margin-bottom: 6px; font-weight: 500;">Full Name</label>
+                    <input type="text" id="profileName" name="name" value="${currentUser.name}" required style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 14px;">
+                </div>
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label for="profileEmail" style="display: block; margin-bottom: 6px; font-weight: 500;">Email</label>
+                    <input type="email" id="profileEmail" name="email" value="${currentUser.email}" required style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 14px;" disabled>
+                </div>
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label for="profileDepartment" style="display: block; margin-bottom: 6px; font-weight: 500;">Department</label>
+                    <input type="text" id="profileDepartment" name="department" value="${currentUser.department || ''}" required style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 14px;">
+                </div>
+                <div class="form-actions" style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px;">
+                    <button type="button" class="btn btn-secondary" onclick="setupDashboard()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    `;
+    document.getElementById('editProfileForm').addEventListener('submit', handleEditProfile);
+}
+
+function handleEditProfile(event) {
+    event.preventDefault();
+    const formData = new FormData(event.target);
+    const updatedName = formData.get('name');
+    const updatedDepartment = formData.get('department');
+    if (!updatedName || !updatedDepartment) {
+        showToast('Please fill all fields', 'error');
+        return;
+    }
+    currentUser.name = updatedName;
+    currentUser.department = updatedDepartment;
+    localStorage.setItem('currentUser', JSON.stringify(currentUser));
+    showToast('Profile updated successfully!', 'success');
+    setupDashboard();
 }
 
 function showMyLeaveRequests() {
-    showToast('Leave request feature coming soon!', 'info');
+    // Show user's leave requests and allow new leave request
+    const dashboardContent = document.getElementById('dashboardContent');
+    if (!dashboardContent || !currentUser) return;
+    const userId = mockData.users.find(u => u.email === currentUser.email)?.id;
+    const userLeaves = mockData.leaveRequests.filter(r => r.userId === userId);
+    dashboardContent.innerHTML = `
+        <div class="table-container">
+            <div class="table-header">
+                <h3>My Leave Requests</h3>
+                <button class="btn btn-primary btn-sm" onclick="showNewLeaveRequestForm()">
+                    <i class='fas fa-plus'></i> New Leave Request
+                </button>
+            </div>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Type</th>
+                        <th>Start Date</th>
+                        <th>End Date</th>
+                        <th>Days</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${userLeaves.length === 0 ? `<tr><td colspan='5' style='text-align:center;'>No leave requests found.</td></tr>` : userLeaves.map(request => `
+                        <tr>
+                            <td style="text-transform: capitalize;">${request.type}</td>
+                            <td>${request.startDate}</td>
+                            <td>${request.endDate}</td>
+                            <td>${request.days}</td>
+                            <td><span class="status-badge status-${request.status}">${request.status}</span></td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+function showNewLeaveRequestForm() {
+    const dashboardContent = document.getElementById('dashboardContent');
+    if (!dashboardContent || !currentUser) return;
+    dashboardContent.innerHTML = `
+        <div class="form-container" style="max-width: 500px; margin: 0 auto;">
+            <div class="form-header">
+                <h3>Request New Leave</h3>
+                <p>Submit a new leave request</p>
+            </div>
+            <form id="newLeaveRequestForm" style="background: var(--bg-primary); padding: 24px; border-radius: 8px; box-shadow: var(--shadow-light); border: 1px solid var(--border-color);">
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label for="leaveType" style="display: block; margin-bottom: 6px; font-weight: 500;">Leave Type</label>
+                    <select id="leaveType" name="type" required style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 14px;">
+                        <option value="">Select Type</option>
+                        <option value="vacation">Vacation</option>
+                        <option value="sick">Sick</option>
+                        <option value="personal">Personal</option>
+                    </select>
+                </div>
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label for="startDate" style="display: block; margin-bottom: 6px; font-weight: 500;">Start Date</label>
+                    <input type="date" id="startDate" name="startDate" required style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 14px;">
+                </div>
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label for="endDate" style="display: block; margin-bottom: 6px; font-weight: 500;">End Date</label>
+                    <input type="date" id="endDate" name="endDate" required style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 14px;">
+                </div>
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label for="reason" style="display: block; margin-bottom: 6px; font-weight: 500;">Reason</label>
+                    <textarea id="reason" name="reason" rows="2" required style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 14px;"></textarea>
+                </div>
+                <div class="form-actions" style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px;">
+                    <button type="button" class="btn btn-secondary" onclick="showMyLeaveRequests()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Submit Request</button>
+                </div>
+            </form>
+        </div>
+    `;
+    document.getElementById('newLeaveRequestForm').addEventListener('submit', handleNewLeaveRequest);
+}
+
+function handleNewLeaveRequest(event) {
+    event.preventDefault();
+    const formData = new FormData(event.target);
+    const type = formData.get('type');
+    const startDate = formData.get('startDate');
+    const endDate = formData.get('endDate');
+    const reason = formData.get('reason');
+    const userId = mockData.users.find(u => u.email === currentUser.email)?.id;
+    if (!type || !startDate || !endDate || !reason || !userId) {
+        showToast('Please fill all fields', 'error');
+        return;
+    }
+    // Calculate days
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const days = Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1;
+    if (days <= 0) {
+        showToast('End date must be after start date', 'error');
+        return;
+    }
+    // Add to mockData
+    mockData.leaveRequests.push({
+        id: Math.max(0, ...mockData.leaveRequests.map(r => r.id)) + 1,
+        userId,
+        employeeName: currentUser.name,
+        type,
+        startDate,
+        endDate,
+        days,
+        reason,
+        status: 'pending'
+    });
+    showToast('Leave request submitted!', 'success');
+    showMyLeaveRequests();
 }
 
 // Permission checking
@@ -1214,3 +1372,13 @@ async function apiCall(endpoint, method = 'GET', data = null) {
         throw error;
     }
 }
+
+// Make navigation and event handler functions globally accessible for HTML onclick and DOMContentLoaded
+window.showRegisterPage = showRegisterPage;
+window.showLoginPage = showLoginPage;
+window.demoLogin = demoLogin;
+window.setupEventListeners = setupEventListeners;
+// Expose additional navigation functions for inline handlers
+window.showHomePage = showHomePage;
+window.showDashboardPage = showDashboardPage;
+window.setupDashboard = setupDashboard;

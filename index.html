@@ -529,5 +529,36 @@
     }
     </style>
     <script src="script.js"></script>
+    <script>
+    // Password strength meter logic for registration page
+    function updatePasswordStrengthMeter() {
+        const password = document.getElementById('registerPassword')?.value || '';
+        const strengthMeterFill = document.getElementById('strengthMeterFill');
+        const strengthText = document.getElementById('strengthText');
+        if (!strengthMeterFill || !strengthText) return;
+        let score = 0;
+        if (password.length >= 8) score++;
+        if (/[A-Z]/.test(password)) score++;
+        if (/[0-9]/.test(password)) score++;
+        if (/[^A-Za-z0-9]/.test(password)) score++;
+        const percent = (score / 4) * 100;
+        strengthMeterFill.style.width = percent + '%';
+        strengthMeterFill.style.transition = 'width 0.3s, background-color 0.3s';
+        let text = 'Very Weak';
+        let color = '#e74c3c';
+        if (score === 1) { text = 'Weak'; color = '#e67e22'; }
+        else if (score === 2) { text = 'Fair'; color = '#f1c40f'; }
+        else if (score === 3) { text = 'Good'; color = '#2ecc71'; }
+        else if (score === 4) { text = 'Strong'; color = '#27ae60'; }
+        strengthText.textContent = `Password strength: ${text}`;
+        strengthMeterFill.style.backgroundColor = color;
+    }
+    document.addEventListener('DOMContentLoaded', function() {
+        var passwordInput = document.getElementById('registerPassword');
+        if (passwordInput) {
+            passwordInput.addEventListener('input', updatePasswordStrengthMeter);
+        }
+    });
+    </script>
 </body>
 </html>
