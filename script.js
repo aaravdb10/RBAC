@@ -304,26 +304,25 @@ function handleRegister(event) {
 }
 
 // Setup dashboard based on user role
-function setupDashboard() {
+// Track the current nav index for active highlight
+let currentNavIndex = 0;
+function setupDashboard(activeIndex = 0) {
     if (!currentUser || !currentRole) {
         showHomePage();
         return;
     }
-    
+    currentNavIndex = activeIndex;
     // Update navigation
     setupNavigation();
-    
+    setActiveNavLink(currentNavIndex);
     // Update user info
     const userName = document.getElementById('userName');
     const userRole = document.getElementById('userRole');
-    
     if (userName) userName.textContent = currentUser.name;
     if (userRole) userRole.textContent = currentRole.charAt(0).toUpperCase() + currentRole.slice(1);
-    
     // Setup dashboard content
     const dashboardTitle = document.getElementById('dashboardTitle');
     const dashboardSubtitle = document.getElementById('dashboardSubtitle');
-    
     if (currentRole === 'admin') {
         if (dashboardTitle) dashboardTitle.textContent = 'Admin Dashboard';
         if (dashboardSubtitle) dashboardSubtitle.textContent = 'Complete system control and user management';
@@ -365,8 +364,7 @@ function setupNavigation() {
 
 // Dashboard content functions
 function showDashboard() {
-    setActiveNavLink(0);
-    setupDashboard();
+    setupDashboard(0);
 }
 
 function showAdminDashboard() {
@@ -608,7 +606,9 @@ function showUsers() {
         return;
     }
     
+    setupNavigation();
     setActiveNavLink(1);
+    currentNavIndex = 1;
     const dashboardContent = document.getElementById('dashboardContent');
     
     const usersHtml = `
@@ -667,7 +667,9 @@ function showSystemLogs() {
         return;
     }
     
+    setupNavigation();
     setActiveNavLink(2);
+    currentNavIndex = 2;
     const dashboardContent = document.getElementById('dashboardContent');
     
     const logsHtml = `
@@ -715,7 +717,9 @@ function showLeaveRequests() {
         return;
     }
     
+    setupNavigation();
     setActiveNavLink(3);
+    currentNavIndex = 3;
     const dashboardContent = document.getElementById('dashboardContent');
     
     const leaveHtml = `
@@ -754,20 +758,10 @@ function showLeaveRequests() {
                             </td>
                             <td>
                                 ${request.status === 'pending' ? `
-                                    <button class="btn btn-success btn-sm" onclick="approveLeave(${request.id})">
-                                        <i class="fas fa-check"></i>
-                                        Approve
-                                    </button>
-                                    <button class="btn btn-danger btn-sm" onclick="rejectLeave(${request.id})">
-                                        <i class="fas fa-times"></i>
-                                        Reject
-                                    </button>
-                                ` : `
-                                    <button class="btn btn-secondary btn-sm" onclick="viewLeave(${request.id})">
-                                        <i class="fas fa-eye"></i>
-                                        View
-                                    </button>
-                                `}
+                                    <button class="btn btn-success btn-sm" onclick="approveLeave(${request.id})"><i class="fas fa-check"></i> Approve</button>
+                                    <button class="btn btn-danger btn-sm" onclick="rejectLeave(${request.id})"><i class="fas fa-times"></i> Reject</button>
+                                ` : ''}
+                                <button class="btn btn-secondary btn-sm" onclick="viewLeave(${request.id})"><i class="fas fa-eye"></i> View</button>
                             </td>
                         </tr>
                     `).join('')}
@@ -781,14 +775,109 @@ function showLeaveRequests() {
 
 // Placeholder functions for other navigation items
 function showTeam() {
-    showToast('Team management feature coming soon!', 'info');
+    setupNavigation();
+    setActiveNavLink(1);
+    currentNavIndex = 1;
+    // Show a table of all employees (role: employee)
+    const dashboardContent = document.getElementById('dashboardContent');
+    if (!dashboardContent) return;
+    const employees = mockData.users.filter(u => u.role === 'employee');
+    dashboardContent.innerHTML = `
+        <div class="table-container">
+            <div class="table-header">
+                <h3>Team Members</h3>
+                <button class="btn btn-primary btn-sm" onclick="showAddUser()">
+                    <i class="fas fa-plus"></i> Add Employee
+                </button>
+            </div>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${employees.length === 0 ? `<tr><td colspan='4' style='text-align:center;'>No employees found.</td></tr>` : employees.map(user => `
+                        <tr>
+                            <td>${user.name}</td>
+                            <td>${user.email}</td>
+                            <td><span class="status-badge status-${user.status}">${user.status}</span></td>
+                            <td>
+                                <button class="btn btn-secondary btn-sm" onclick="editUser(${user.id})"><i class="fas fa-edit"></i> Edit</button>
+                                <button class="btn btn-danger btn-sm" onclick="deleteUser(${user.id})"><i class="fas fa-trash"></i> Delete</button>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
 }
 
 function showReports() {
-    showToast('Reports feature coming soon!', 'info');
+    setupNavigation();
+    // For admin: index 4, for manager: index 2
+    let idx = 4;
+    if (currentRole === 'manager') idx = 2;
+    setActiveNavLink(idx);
+    currentNavIndex = idx;
+    // Show a simple report summary
+    const dashboardContent = document.getElementById('dashboardContent');
+    if (!dashboardContent) return;
+    // User counts by role
+    const adminCount = mockData.users.filter(u => u.role === 'admin').length;
+    const managerCount = mockData.users.filter(u => u.role === 'manager').length;
+    const employeeCount = mockData.users.filter(u => u.role === 'employee').length;
+    // Leave stats
+    const totalLeaves = mockData.leaveRequests.length;
+    const pendingLeaves = mockData.leaveRequests.filter(r => r.status === 'pending').length;
+    const approvedLeaves = mockData.leaveRequests.filter(r => r.status === 'approved').length;
+    const rejectedLeaves = mockData.leaveRequests.filter(r => r.status === 'rejected').length;
+    dashboardContent.innerHTML = `
+        <div class="report-summary" style="max-width:600px;margin:0 auto;">
+            <h3 style="margin-bottom:18px;">System Reports</h3>
+            <div style="margin-bottom:16px;">
+                <strong>User Counts:</strong>
+                <ul style="margin:8px 0 0 18px;">
+                    <li>Admins: ${adminCount}</li>
+                    <li>Managers: ${managerCount}</li>
+                    <li>Employees: ${employeeCount}</li>
+                </ul>
+            </div>
+            <div style="margin-bottom:16px;">
+                <strong>Leave Requests:</strong>
+                <ul style="margin:8px 0 0 18px;">
+                    <li>Total: ${totalLeaves}</li>
+                    <li>Pending: ${pendingLeaves}</li>
+                    <li>Approved: ${approvedLeaves}</li>
+                    <li>Rejected: ${rejectedLeaves}</li>
+                </ul>
+                <button class="btn btn-primary btn-sm" onclick="generateReport()" style="margin-top:10px;">
+                    <i class="fas fa-download"></i> Download Leave Report (CSV)
+                </button>
+            </div>
+            <div style="margin-bottom:16px;">
+                <strong>Recent Activity:</strong>
+                <ul style="margin:8px 0 0 18px;">
+                    ${mockData.systemLogs.slice(0,5).map(log => `<li>${log.timestamp}: ${log.action} by ${log.user} (${log.status})</li>`).join('')}
+                </ul>
+            </div>
+            <div style="margin-bottom:16px;">
+                <button class="btn btn-primary btn-sm" onclick="exportLogs()">
+                    <i class="fas fa-download"></i> Download System Logs (CSV)
+                </button>
+            </div>
+        </div>
+    `;
 }
 
 function showProfile() {
+    setupNavigation();
+    setActiveNavLink(1);
+    currentNavIndex = 1;
     // Show profile management form for the current user
     const dashboardContent = document.getElementById('dashboardContent');
     if (!dashboardContent || !currentUser) return;
@@ -838,6 +927,9 @@ function handleEditProfile(event) {
 }
 
 function showMyLeaveRequests() {
+    setupNavigation();
+    setActiveNavLink(2);
+    currentNavIndex = 2;
     // Show user's leave requests and allow new leave request
     const dashboardContent = document.getElementById('dashboardContent');
     if (!dashboardContent || !currentUser) return;
@@ -1333,15 +1425,86 @@ function rejectLeave(requestId) {
 }
 
 function viewLeave(requestId) {
-    showToast('Leave details view coming soon!', 'info');
+    // Show leave request details in a modal or inline
+    const request = mockData.leaveRequests.find(r => r.id === requestId);
+    if (!request) {
+        showToast('Leave request not found!', 'error');
+        return;
+    }
+    // Simple modal implementation
+    let modal = document.getElementById('leaveDetailsModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'leaveDetailsModal';
+        modal.style.position = 'fixed';
+        modal.style.top = '0';
+        modal.style.left = '0';
+        modal.style.width = '100vw';
+        modal.style.height = '100vh';
+        modal.style.background = 'rgba(0,0,0,0.35)';
+        modal.style.display = 'flex';
+        modal.style.alignItems = 'center';
+        modal.style.justifyContent = 'center';
+        modal.style.zIndex = '9999';
+        document.body.appendChild(modal);
+    }
+    modal.innerHTML = `
+        <div style="background:#fff; border-radius:10px; box-shadow:0 8px 32px rgba(0,0,0,0.18); padding:32px 24px 24px 24px; min-width:320px; max-width:350px; margin:0 auto; position:relative;">
+            <span style="position:absolute;top:12px;right:18px;color:#888;font-size:24px;cursor:pointer;z-index:2;" onclick="document.getElementById('leaveDetailsModal').remove()">&times;</span>
+            <h3 style="margin-bottom:12px;">Leave Request Details</h3>
+            <div><strong>Employee:</strong> ${request.employeeName}</div>
+            <div><strong>Type:</strong> ${request.type}</div>
+            <div><strong>Start Date:</strong> ${request.startDate}</div>
+            <div><strong>End Date:</strong> ${request.endDate}</div>
+            <div><strong>Days:</strong> ${request.days}</div>
+            <div><strong>Status:</strong> <span class="status-badge status-${request.status}">${request.status}</span></div>
+            <div><strong>Reason:</strong> ${request.reason}</div>
+            <div style="margin-top:18px;text-align:right;">
+                <button class="btn btn-secondary" onclick="document.getElementById('leaveDetailsModal').remove()">Close</button>
+            </div>
+        </div>
+    `;
+    modal.style.display = 'flex';
 }
 
 function generateReport() {
-    showToast('Report generation feature coming soon!', 'info');
+    // Export leave requests as CSV
+    const headers = ['Employee', 'Type', 'Start Date', 'End Date', 'Days', 'Status', 'Reason'];
+    const rows = mockData.leaveRequests.map(r => [r.employeeName, r.type, r.startDate, r.endDate, r.days, r.status, r.reason]);
+    let csv = headers.join(',') + '\n';
+    rows.forEach(row => {
+        csv += row.map(field => '"' + String(field).replace(/"/g, '""') + '"').join(',') + '\n';
+    });
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'leave_requests_report.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('Leave requests exported as CSV!', 'success');
 }
 
 function exportLogs() {
-    showToast('Log export feature coming soon!', 'info');
+    // Export system logs as CSV
+    const headers = ['Timestamp', 'Action', 'User', 'Status'];
+    const rows = mockData.systemLogs.map(log => [log.timestamp, log.action, log.user, log.status]);
+    let csv = headers.join(',') + '\n';
+    rows.forEach(row => {
+        csv += row.map(field => '"' + String(field).replace(/"/g, '""') + '"').join(',') + '\n';
+    });
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'system_logs.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('System logs exported as CSV!', 'success');
 }
 
 // API Helper Function (for future backend integration)
