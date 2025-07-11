@@ -279,12 +279,18 @@
                 <div class="form-group">
                     <label for="registerPassword">Password</label>
                     <input type="password" id="registerPassword" name="password" placeholder="Create a password" required>
+                    <div class="password-strength-visual">
+                        <div class="strength-meter-bar">
+                            <div class="strength-meter-fill" id="strengthMeterFill"></div>
+                        </div>
+                        <div class="strength-text" id="strengthText">Password strength: Weak</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="confirmPassword">Confirm Password</label>
+                        <input type="password" id="confirmPassword" name="confirmPassword" placeholder="Confirm your password" required>
+                    </div>
                 </div>
                 
-                <div class="form-group">
-                    <label for="confirmPassword">Confirm Password</label>
-                    <input type="password" id="confirmPassword" name="confirmPassword" placeholder="Confirm your password" required>
-                </div>
                 
                 <div class="form-group">
                     <label for="department">Department</label>
@@ -449,6 +455,79 @@
         </div>
     </div>
 
+    <style>
+    /* OTP Modal Overlay Styles */
+    #otpModal.modal {
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        width: 100vw; height: 100vh;
+        background: rgba(0,0,0,0.35);
+        z-index: 9999;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.2s;
+    }
+    #otpModal.modal[style*="display: flex"] {
+        display: flex !important;
+    }
+    #otpModal .modal-content {
+        background: #fff;
+        border-radius: 10px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+        padding: 32px 24px 24px 24px;
+        min-width: 320px;
+        max-width: 350px;
+        margin: 0 auto;
+        position: relative;
+        animation: otpModalIn 0.25s cubic-bezier(.4,1.4,.6,1) both;
+    }
+    @keyframes otpModalIn {
+        0% { transform: translateY(40px) scale(0.98); opacity: 0; }
+        100% { transform: none; opacity: 1; }
+    }
+    #otpModal .close {
+        position: absolute;
+        top: 12px;
+        right: 18px;
+        color: #888;
+        font-size: 24px;
+        cursor: pointer;
+        z-index: 2;
+    }
+    #otpModal input#otpInput {
+        border: 1px solid #d1d5db;
+        border-radius: 5px;
+        font-size: 18px;
+        padding: 10px;
+        margin-bottom: 12px;
+        width: 100%;
+        box-sizing: border-box;
+        letter-spacing: 4px;
+        text-align: center;
+        outline: none;
+        transition: border 0.2s;
+    }
+    #otpModal input#otpInput:focus {
+        border-color: #4f8cff;
+    }
+    #otpModal #verifyOtpBtn {
+        margin-top: 0;
+        margin-bottom: 0;
+    }
+    #otpModal #otpDemoCode {
+        margin-top: 10px;
+        font-size: 13px;
+        color: #888;
+        text-align: center;
+        user-select: all;
+    }
+    #otpModal #otpInfo {
+        text-align: center;
+        margin-bottom: 14px;
+        color: #333;
+    }
+    </style>
     <script src="script.js"></script>
 </body>
 </html>
