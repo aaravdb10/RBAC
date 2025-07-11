@@ -238,27 +238,53 @@ function demoLogin(role) {
 // Handle login form submission
 function handleLogin(event) {
     event.preventDefault();
-    
+
+    // --- Login Cooldown Logic ---
+    const COOLDOWN_ATTEMPTS = 3;
+    const COOLDOWN_MINUTES = 5;
+    const COOLDOWN_KEY = 'loginCooldownUntil';
+    const ATTEMPTS_KEY = 'loginFailedAttempts';
+    const now = Date.now();
+    const cooldownUntil = parseInt(localStorage.getItem(COOLDOWN_KEY) || '0', 10);
+    if (cooldownUntil && now < cooldownUntil) {
+        const secondsLeft = Math.ceil((cooldownUntil - now) / 1000);
+        const min = Math.floor(secondsLeft / 60);
+        const sec = secondsLeft % 60;
+        showToast(`Too many failed attempts. Please try again after ${min}m ${sec < 10 ? '0' : ''}${sec}s.`, 'error');
+        return;
+    }
+
     const formData = new FormData(event.target);
     const email = formData.get('email');
     const password = formData.get('password');
-    
+
     console.log('Login attempt:', email);
-    
+
     // Check demo users
     const user = demoUsers[email];
     if (user && user.password === password) {
+        // Reset failed attempts and cooldown
+        localStorage.removeItem(ATTEMPTS_KEY);
+        localStorage.removeItem(COOLDOWN_KEY);
         currentUser = user;
         currentRole = user.role;
-        
         // Save to localStorage
         localStorage.setItem('currentUser', JSON.stringify(user));
         localStorage.setItem('currentRole', user.role);
-        
         showToast(`Welcome back, ${user.name}!`, 'success');
         showDashboardPage();
     } else {
-        showToast('Invalid email or password', 'error');
+        // Failed login attempt
+        let attempts = parseInt(localStorage.getItem(ATTEMPTS_KEY) || '0', 10) + 1;
+        if (attempts >= COOLDOWN_ATTEMPTS) {
+            const cooldownTime = now + COOLDOWN_MINUTES * 60 * 1000;
+            localStorage.setItem(COOLDOWN_KEY, cooldownTime.toString());
+            localStorage.setItem(ATTEMPTS_KEY, '0');
+            showToast(`Too many failed attempts. Please try again after ${COOLDOWN_MINUTES}m 00s.`, 'error');
+        } else {
+            localStorage.setItem(ATTEMPTS_KEY, attempts.toString());
+            showToast('Invalid email or password', 'error');
+        }
     }
 }
 
