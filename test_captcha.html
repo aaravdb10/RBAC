@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CAPTCHA Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f5f5f5;
+        }
+        .test-container {
+            max-width: 500px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .captcha-section {
+            margin: 20px 0;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            background: #f9f9f9;
+        }
+        .captcha-tabs {
+            display: flex;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        .captcha-tab {
+            background: none;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-size: 14px;
+            color: #666;
+            border-bottom: 2px solid transparent;
+            transition: all 0.3s ease;
+        }
+        .captcha-tab.active {
+            color: #4f8cff;
+            border-bottom-color: #4f8cff;
+            font-weight: 600;
+        }
+        .text-captcha-display {
+            background: #fff;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 28px;
+            font-weight: bold;
+            letter-spacing: 8px;
+            text-align: center;
+            color: #333;
+            position: relative;
+            overflow: hidden;
+            user-select: none;
+        }
+        .image-captcha-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .captcha-image {
+            width: 100%;
+            height: 100px;
+            object-fit: cover;
+            border: 3px solid #ddd;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .captcha-image.selected {
+            border-color: #4f8cff;
+            box-shadow: 0 0 10px rgba(79, 140, 255, 0.5);
+        }
+        .captcha-refresh {
+            background: #4f8cff;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-bottom: 15px;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        .btn {
+            background: #4f8cff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>CAPTCHA Test</h1>
+        
+        <div class="captcha-section">
+            <div class="captcha-tabs">
+                <button type="button" class="captcha-tab active" data-captcha="text">Text CAPTCHA</button>
+                <button type="button" class="captcha-tab" data-captcha="image">Image CAPTCHA</button>
+            </div>
+            
+            <!-- Text CAPTCHA -->
+            <div class="captcha-content" id="textCaptcha">
+                <div class="text-captcha-display" id="textCaptchaDisplay">Loading...</div>
+                <button type="button" class="captcha-refresh" onclick="generateTextCaptcha()">
+                    🔄 Refresh
+                </button>
+                <div>
+                    <label for="textCaptchaInput">Enter the text above:</label>
+                    <input type="text" id="textCaptchaInput" placeholder="Enter CAPTCHA text">
+                </div>
+            </div>
+            
+            <!-- Image CAPTCHA -->
+            <div class="captcha-content" id="imageCaptcha" style="display: none;">
+                <div class="image-captcha-instruction">
+                    <p>Select all images that contain: <span id="imageTargetText">cars</span></p>
+                </div>
+                <div class="image-captcha-grid" id="imageCaptchaGrid">
+                    <!-- Images will be generated by JavaScript -->
+                </div>
+                <button type="button" class="captcha-refresh" onclick="generateImageCaptcha()">
+                    🔄 Refresh
+                </button>
+            </div>
+        </div>
+        
+        <button class="btn" onclick="testCaptcha()">Test CAPTCHA</button>
+        <div id="status"></div>
+    </div>
+
+    <script>
+        // CAPTCHA Variables
+        let currentTextCaptcha = '';
+        let currentImageCaptcha = [];
+        let selectedImages = [];
+
+        // CAPTCHA Categories and Images
+        const captchaCategories = {
+            cars: {
+                name: 'cars',
+                images: [
+                    'https://via.placeholder.com/200x200/FF0000/FFFFFF?text=CAR1',
+                    'https://via.placeholder.com/200x200/00FF00/FFFFFF?text=CAR2',
+                    'https://via.placeholder.com/200x200/0000FF/FFFFFF?text=CAR3',
+                    'https://via.placeholder.com/200x200/FFFF00/FFFFFF?text=CAR4'
+                ]
+            },
+            animals: {
+                name: 'animals',
+                images: [
+                    'https://via.placeholder.com/200x200/FF00FF/FFFFFF?text=DOG',
+                    'https://via.placeholder.com/200x200/00FFFF/FFFFFF?text=CAT',
+                    'https://via.placeholder.com/200x200/FFA500/FFFFFF?text=BIRD',
+                    'https://via.placeholder.com/200x200/800080/FFFFFF?text=FISH'
+                ]
+            }
+        };
+
+        // Distractor images
+        const distractorImages = [
+            'https://via.placeholder.com/200x200/808080/FFFFFF?text=HOUSE',
+            'https://via.placeholder.com/200x200/A0A0A0/FFFFFF?text=TREE',
+            'https://via.placeholder.com/200x200/606060/FFFFFF?text=FOOD',
+            'https://via.placeholder.com/200x200/404040/FFFFFF?text=TECH',
+            'https://via.placeholder.com/200x200/202020/FFFFFF?text=MISC'
+        ];
+
+        // Generate text CAPTCHA
+        function generateTextCaptcha() {
+            const chars = 'ABCDEFGHIJKLMNPQRSTUVWXYZ123456789';
+            let captcha = '';
+            for (let i = 0; i < 6; i++) {
+                captcha += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            currentTextCaptcha = captcha;
+            
+            const display = document.getElementById('textCaptchaDisplay');
+            if (display) {
+                display.textContent = captcha;
+                display.style.transform = `rotate(${Math.random() * 6 - 3}deg)`;
+                display.style.background = `linear-gradient(${Math.random() * 360}deg, #f0f0f0, #e0e0e0)`;
+            }
+            
+            const input = document.getElementById('textCaptchaInput');
+            if (input) input.value = '';
+        }
+
+        // Generate image CAPTCHA
+        function generateImageCaptcha() {
+            const categories = Object.keys(captchaCategories);
+            const selectedCategory = categories[Math.floor(Math.random() * categories.length)];
+            const categoryData = captchaCategories[selectedCategory];
+            
+            const targetText = document.getElementById('imageTargetText');
+            if (targetText) targetText.textContent = categoryData.name;
+            
+            const correctCount = Math.floor(Math.random() * 3) + 2;
+            const correctImages = categoryData.images.slice(0, correctCount);
+            
+            const totalImages = 9;
+            const distractorCount = totalImages - correctCount;
+            const selectedDistractors = [];
+            
+            for (let i = 0; i < distractorCount; i++) {
+                const randomDistractor = distractorImages[Math.floor(Math.random() * distractorImages.length)];
+                selectedDistractors.push(randomDistractor);
+            }
+            
+            const allImages = [...correctImages, ...selectedDistractors];
+            const shuffledImages = allImages.sort(() => Math.random() - 0.5);
+            
+            currentImageCaptcha = correctImages;
+            selectedImages = [];
+            
+            const grid = document.getElementById('imageCaptchaGrid');
+            if (grid) {
+                grid.innerHTML = '';
+                shuffledImages.forEach((imageSrc, index) => {
+                    const img = document.createElement('img');
+                    img.src = imageSrc;
+                    img.className = 'captcha-image';
+                    img.dataset.src = imageSrc;
+                    img.addEventListener('click', () => toggleImageSelection(img));
+                    grid.appendChild(img);
+                });
+            }
+        }
+
+        // Toggle image selection
+        function toggleImageSelection(img) {
+            const imgSrc = img.dataset.src;
+            
+            if (img.classList.contains('selected')) {
+                img.classList.remove('selected');
+                const index = selectedImages.indexOf(imgSrc);
+                if (index > -1) {
+                    selectedImages.splice(index, 1);
+                }
+            } else {
+                img.classList.add('selected');
+                selectedImages.push(imgSrc);
+            }
+        }
+
+        // Setup tab switching
+        function setupCaptchaTabs() {
+            document.querySelectorAll('.captcha-tab').forEach(tab => {
+                tab.addEventListener('click', function() {
+                    const captchaType = this.dataset.captcha;
+                    
+                    document.querySelectorAll('.captcha-tab').forEach(t => t.classList.remove('active'));
+                    this.classList.add('active');
+                    
+                    if (captchaType === 'text') {
+                        document.getElementById('textCaptcha').style.display = 'block';
+                        document.getElementById('imageCaptcha').style.display = 'none';
+                    } else {
+                        document.getElementById('textCaptcha').style.display = 'none';
+                        document.getElementById('imageCaptcha').style.display = 'block';
+                    }
+                });
+            });
+        }
+
+        // Test CAPTCHA
+        function testCaptcha() {
+            const statusDiv = document.getElementById('status');
+            const activeTab = document.querySelector('.captcha-tab.active');
+            const captchaType = activeTab.dataset.captcha;
+            
+            if (captchaType === 'text') {
+                const userInput = document.getElementById('textCaptchaInput').value;
+                if (userInput.toUpperCase() === currentTextCaptcha.toUpperCase()) {
+                    statusDiv.innerHTML = '<div class="status success">✅ Text CAPTCHA verified successfully!</div>';
+                } else {
+                    statusDiv.innerHTML = '<div class="status error">❌ Text CAPTCHA verification failed!</div>';
+                    generateTextCaptcha();
+                }
+            } else {
+                const correct = currentImageCaptcha.every(img => selectedImages.includes(img)) && 
+                               selectedImages.length === currentImageCaptcha.length;
+                
+                if (correct) {
+                    statusDiv.innerHTML = '<div class="status success">✅ Image CAPTCHA verified successfully!</div>';
+                } else {
+                    statusDiv.innerHTML = '<div class="status error">❌ Image CAPTCHA verification failed!</div>';
+                    generateImageCaptcha();
+                }
+            }
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            setupCaptchaTabs();
+            generateTextCaptcha();
+            generateImageCaptcha();
+        });
+    </script>
+</body>
+</html>

@@ -107,12 +107,22 @@ function showRegisterPage() {
     console.log('Showing register page');
     hideAllPages();
     document.getElementById('registerPage').style.display = 'block';
+    
+    // Initialize CAPTCHA after page is shown
+    setTimeout(() => {
+        initializeCaptcha();
+    }, 100);
 }
 
 function showLoginPage() {
     console.log('Showing login page');
     hideAllPages();
     document.getElementById('loginPage').style.display = 'block';
+    
+    // Initialize CAPTCHA after page is shown
+    setTimeout(() => {
+        initializeCaptcha();
+    }, 100);
 }
 
 function showDashboardPage() {
@@ -148,6 +158,9 @@ function checkExistingSession() {
 
 // Setup event listeners
 function setupEventListeners() {
+    // Initialize CAPTCHA system
+    initializeCaptcha();
+    
     // Dark mode toggles
     document.querySelectorAll('.dark-mode-toggle').forEach(toggle => {
         toggle.addEventListener('click', toggleDarkMode);
@@ -239,6 +252,11 @@ function demoLogin(role) {
 function handleLogin(event) {
     event.preventDefault();
 
+    // Validate CAPTCHA first
+    if (!validateCaptcha(true)) {
+        return;
+    }
+
     // --- Login Cooldown Logic ---
     const COOLDOWN_ATTEMPTS = 3;
     const COOLDOWN_MINUTES = 5;
@@ -292,6 +310,11 @@ function handleLogin(event) {
 function handleRegister(event) {
     event.preventDefault();
     
+    // Validate CAPTCHA first
+    if (!validateCaptcha(false)) {
+        return;
+    }
+    
     const formData = new FormData(event.target);
     const userData = {
         firstName: formData.get('firstName'),
@@ -312,20 +335,9 @@ function handleRegister(event) {
         showToast('User already exists', 'error');
         return;
     }
-    
-    // Create new user (for demo purposes)
-    const newUser = {
-        email: userData.email,
-        password: userData.password,
-        role: 'employee', // Default role
-        name: `${userData.firstName} ${userData.lastName}`,
-        department: userData.department
-    };
-    
-    // Add to demo users
-    demoUsers[userData.email] = newUser;
-    
-    showToast('Account created successfully! Please log in.', 'success');
+
+    // Registration successful
+    showToast('Registration successful! Please login.', 'success');
     showLoginPage();
 }
 
@@ -1682,3 +1694,333 @@ window.setupEventListeners = setupEventListeners;
 window.showHomePage = showHomePage;
 window.showDashboardPage = showDashboardPage;
 window.setupDashboard = setupDashboard;
+
+// CAPTCHA System Implementation
+let currentTextCaptcha = '';
+let currentLoginTextCaptcha = '';
+let currentImageCaptcha = [];
+let currentLoginImageCaptcha = [];
+let selectedImages = [];
+let selectedLoginImages = [];
+
+// CAPTCHA Categories and Images
+const captchaCategories = {
+    cars: {
+        name: 'cars',
+        images: [
+            'https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?w=200&h=200&fit=crop',
+            'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=200&h=200&fit=crop',
+            'https://images.unsplash.com/photo-1580414159825-971b7ac6b96e?w=200&h=200&fit=crop',
+            'https://images.unsplash.com/photo-1514316454349-750a7fd3da3a?w=200&h=200&fit=crop'
+        ]
+    },
+    animals: {
+        name: 'animals',
+        images: [
+            'https://images.unsplash.com/photo-1574144611937-0df059b5ef3e?w=200&h=200&fit=crop',
+            'https://images.unsplash.com/photo-1552053831-71594a27632d?w=200&h=200&fit=crop',
+            'https://images.unsplash.com/photo-1583337130417-3346a1be7dee?w=200&h=200&fit=crop',
+            'https://images.unsplash.com/photo-1574158622682-e40e69881006?w=200&h=200&fit=crop'
+        ]
+    },
+    nature: {
+        name: 'nature',
+        images: [
+            'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=200&h=200&fit=crop',
+            'https://images.unsplash.com/photo-1518837695005-2083093ee35b?w=200&h=200&fit=crop',
+            'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=200&h=200&fit=crop',
+            'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=200&h=200&fit=crop'
+        ]
+    },
+    buildings: {
+        name: 'buildings',
+        images: [
+            'https://images.unsplash.com/photo-1558618047-3c8c76ca7d13?w=200&h=200&fit=crop',
+            'https://images.unsplash.com/photo-1551806235-a05dd14d9fb9?w=200&h=200&fit=crop',
+            'https://images.unsplash.com/photo-1595107616188-0c9908c8b9a7?w=200&h=200&fit=crop',
+            'https://images.unsplash.com/photo-1511818966892-d7d671e672a2?w=200&h=200&fit=crop'
+        ]
+    }
+};
+
+// Distractor images (non-category images)
+const distractorImages = [
+    'https://images.unsplash.com/photo-1547036967-23d11aacaee0?w=200&h=200&fit=crop',
+    'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=200&h=200&fit=crop',
+    'https://images.unsplash.com/photo-1519389950473-47ba0277781c?w=200&h=200&fit=crop',
+    'https://images.unsplash.com/photo-1547036967-23d11aacaee0?w=200&h=200&fit=crop',
+    'https://images.unsplash.com/photo-1517816743773-6e0fd518b4a6?w=200&h=200&fit=crop'
+];
+
+// Generate random text CAPTCHA
+function generateTextCaptcha() {
+    const chars = 'ABCDEFGHIJKLMNPQRSTUVWXYZ123456789';
+    let captcha = '';
+    for (let i = 0; i < 6; i++) {
+        captcha += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    currentTextCaptcha = captcha;
+    
+    const display = document.getElementById('textCaptchaDisplay');
+    if (display) {
+        display.textContent = captcha;
+        // Add some visual noise
+        display.style.transform = `rotate(${Math.random() * 6 - 3}deg)`;
+        display.style.background = `linear-gradient(${Math.random() * 360}deg, #f0f0f0, #e0e0e0)`;
+    }
+    
+    // Clear input
+    const input = document.getElementById('textCaptchaInput');
+    if (input) input.value = '';
+}
+
+// Generate random text CAPTCHA for login
+function generateLoginTextCaptcha() {
+    const chars = 'ABCDEFGHIJKLMNPQRSTUVWXYZ123456789';
+    let captcha = '';
+    for (let i = 0; i < 6; i++) {
+        captcha += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    currentLoginTextCaptcha = captcha;
+    
+    const display = document.getElementById('loginTextCaptchaDisplay');
+    if (display) {
+        display.textContent = captcha;
+        // Add some visual noise
+        display.style.transform = `rotate(${Math.random() * 6 - 3}deg)`;
+        display.style.background = `linear-gradient(${Math.random() * 360}deg, #f0f0f0, #e0e0e0)`;
+    }
+    
+    // Clear input
+    const input = document.getElementById('loginTextCaptchaInput');
+    if (input) input.value = '';
+}
+
+// Generate image CAPTCHA
+function generateImageCaptcha() {
+    const categories = Object.keys(captchaCategories);
+    const selectedCategory = categories[Math.floor(Math.random() * categories.length)];
+    const categoryData = captchaCategories[selectedCategory];
+    
+    // Set target text
+    const targetText = document.getElementById('imageTargetText');
+    if (targetText) targetText.textContent = categoryData.name;
+    
+    // Select 2-4 correct images
+    const correctCount = Math.floor(Math.random() * 3) + 2;
+    const correctImages = categoryData.images.slice(0, correctCount);
+    
+    // Fill remaining slots with distractor images
+    const totalImages = 9;
+    const distractorCount = totalImages - correctCount;
+    const selectedDistractors = [];
+    
+    for (let i = 0; i < distractorCount; i++) {
+        const randomDistractor = distractorImages[Math.floor(Math.random() * distractorImages.length)];
+        selectedDistractors.push(randomDistractor);
+    }
+    
+    // Combine and shuffle
+    const allImages = [...correctImages, ...selectedDistractors];
+    const shuffledImages = allImages.sort(() => Math.random() - 0.5);
+    
+    // Store correct answers
+    currentImageCaptcha = correctImages;
+    selectedImages = [];
+    
+    // Display images
+    const grid = document.getElementById('imageCaptchaGrid');
+    if (grid) {
+        grid.innerHTML = '';
+        shuffledImages.forEach((imageSrc, index) => {
+            const img = document.createElement('img');
+            img.src = imageSrc;
+            img.className = 'captcha-image';
+            img.dataset.index = index;
+            img.dataset.src = imageSrc;
+            img.addEventListener('click', () => toggleImageSelection(img, false));
+            grid.appendChild(img);
+        });
+    }
+}
+
+// Generate image CAPTCHA for login
+function generateLoginImageCaptcha() {
+    const categories = Object.keys(captchaCategories);
+    const selectedCategory = categories[Math.floor(Math.random() * categories.length)];
+    const categoryData = captchaCategories[selectedCategory];
+    
+    // Set target text
+    const targetText = document.getElementById('loginImageTargetText');
+    if (targetText) targetText.textContent = categoryData.name;
+    
+    // Select 2-4 correct images
+    const correctCount = Math.floor(Math.random() * 3) + 2;
+    const correctImages = categoryData.images.slice(0, correctCount);
+    
+    // Fill remaining slots with distractor images
+    const totalImages = 9;
+    const distractorCount = totalImages - correctCount;
+    const selectedDistractors = [];
+    
+    for (let i = 0; i < distractorCount; i++) {
+        const randomDistractor = distractorImages[Math.floor(Math.random() * distractorImages.length)];
+        selectedDistractors.push(randomDistractor);
+    }
+    
+    // Combine and shuffle
+    const allImages = [...correctImages, ...selectedDistractors];
+    const shuffledImages = allImages.sort(() => Math.random() - 0.5);
+    
+    // Store correct answers
+    currentLoginImageCaptcha = correctImages;
+    selectedLoginImages = [];
+    
+    // Display images
+    const grid = document.getElementById('loginImageCaptchaGrid');
+    if (grid) {
+        grid.innerHTML = '';
+        shuffledImages.forEach((imageSrc, index) => {
+            const img = document.createElement('img');
+            img.src = imageSrc;
+            img.className = 'captcha-image';
+            img.dataset.index = index;
+            img.dataset.src = imageSrc;
+            img.addEventListener('click', () => toggleImageSelection(img, true));
+            grid.appendChild(img);
+        });
+    }
+}
+
+// Toggle image selection
+function toggleImageSelection(img, isLogin) {
+    const selectedArray = isLogin ? selectedLoginImages : selectedImages;
+    const imgSrc = img.dataset.src;
+    
+    if (img.classList.contains('selected')) {
+        img.classList.remove('selected');
+        const index = selectedArray.indexOf(imgSrc);
+        if (index > -1) {
+            selectedArray.splice(index, 1);
+        }
+    } else {
+        img.classList.add('selected');
+        selectedArray.push(imgSrc);
+    }
+    
+    // Update the array reference
+    if (isLogin) {
+        selectedLoginImages = selectedArray;
+    } else {
+        selectedImages = selectedArray;
+    }
+}
+
+// Validate text CAPTCHA
+function validateTextCaptcha(userInput, isLogin = false) {
+    const correctCaptcha = isLogin ? currentLoginTextCaptcha : currentTextCaptcha;
+    return userInput.toUpperCase() === correctCaptcha.toUpperCase();
+}
+
+// Validate image CAPTCHA
+function validateImageCaptcha(isLogin = false) {
+    const selectedArray = isLogin ? selectedLoginImages : selectedImages;
+    const correctArray = isLogin ? currentLoginImageCaptcha : currentImageCaptcha;
+    
+    // Check if all correct images are selected and no incorrect ones
+    if (selectedArray.length !== correctArray.length) {
+        return false;
+    }
+    
+    return correctArray.every(correctImg => selectedArray.includes(correctImg));
+}
+
+// Setup CAPTCHA tab switching
+function setupCaptchaTabs() {
+    document.querySelectorAll('.captcha-tab').forEach(tab => {
+        tab.addEventListener('click', function() {
+            const captchaType = this.dataset.captcha;
+            const container = this.closest('.captcha-section');
+            
+            // Update tab active state
+            container.querySelectorAll('.captcha-tab').forEach(t => t.classList.remove('active'));
+            this.classList.add('active');
+            
+            // Show/hide captcha content
+            const isLogin = container.closest('#loginPage') !== null;
+            const textCaptchaId = isLogin ? 'loginTextCaptcha' : 'textCaptcha';
+            const imageCaptchaId = isLogin ? 'loginImageCaptcha' : 'imageCaptcha';
+            
+            if (captchaType === 'text') {
+                document.getElementById(textCaptchaId).style.display = 'block';
+                document.getElementById(imageCaptchaId).style.display = 'none';
+            } else {
+                document.getElementById(textCaptchaId).style.display = 'none';
+                document.getElementById(imageCaptchaId).style.display = 'block';
+            }
+        });
+    });
+}
+
+// Validate CAPTCHA before form submission
+function validateCaptcha(isLogin = false) {
+    const container = document.querySelector(isLogin ? '#loginPage .captcha-section' : '#registerPage .captcha-section');
+    const activeTab = container.querySelector('.captcha-tab.active');
+    const captchaType = activeTab.dataset.captcha;
+    
+    if (captchaType === 'text') {
+        const inputId = isLogin ? 'loginTextCaptchaInput' : 'textCaptchaInput';
+        const userInput = document.getElementById(inputId).value;
+        
+        if (!userInput.trim()) {
+            showToast('Please enter the CAPTCHA text', 'error');
+            return false;
+        }
+        
+        if (!validateTextCaptcha(userInput, isLogin)) {
+            showToast('CAPTCHA verification failed. Please try again.', 'error');
+            if (isLogin) {
+                generateLoginTextCaptcha();
+            } else {
+                generateTextCaptcha();
+            }
+            return false;
+        }
+    } else {
+        if (!validateImageCaptcha(isLogin)) {
+            showToast('CAPTCHA verification failed. Please select the correct images.', 'error');
+            if (isLogin) {
+                generateLoginImageCaptcha();
+            } else {
+                generateImageCaptcha();
+            }
+            return false;
+        }
+    }
+    
+    return true;
+}
+
+// Initialize CAPTCHA system
+function initializeCaptcha() {
+    setupCaptchaTabs();
+    
+    // Generate initial CAPTCHAs
+    if (document.getElementById('textCaptchaDisplay')) {
+        generateTextCaptcha();
+        generateImageCaptcha();
+    }
+    
+    if (document.getElementById('loginTextCaptchaDisplay')) {
+        generateLoginTextCaptcha();
+        generateLoginImageCaptcha();
+    }
+}
+
+// Make CAPTCHA functions globally accessible
+window.generateTextCaptcha = generateTextCaptcha;
+window.generateLoginTextCaptcha = generateLoginTextCaptcha;
+window.generateImageCaptcha = generateImageCaptcha;
+window.generateLoginImageCaptcha = generateLoginImageCaptcha;
+window.validateCaptcha = validateCaptcha;
+window.initializeCaptcha = initializeCaptcha;

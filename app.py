@@ -57,8 +57,7 @@ def init_database():
         ('Employee', 'User', 'employee@company.com', 'employee123', 'employee', 'Finance'),
         ('John', 'Doe', 'john.doe@company.com', 'password123', 'employee', 'IT'),
         ('Jane', 'Smith', 'jane.smith@company.com', 'password123', 'manager', 'Marketing'),
-        ('Bob', 'Johnson', 'bob.johnson@company.com', 'password123', 'employee', 'Operations'),
-        ('Aarav', 'Gandhi', 'aaravdb10@gmail.com', '123', 'admin', 'IT'),
+        ('Bob', 'Johnson', 'bob.johnson@company.com', 'password123', 'employee', 'Operations')
     ]
     
     for user in demo_users:
