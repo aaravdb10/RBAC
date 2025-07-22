@@ -23,6 +23,8 @@ CORS(app, origins=[
     "https://rbac-uwxj.onrender.com"
 ])
 
+init_database()
+
 # Database configuration
 DATABASE = 'rbac_system.db'
 
@@ -393,7 +395,6 @@ def delete_user(user_id):
         return jsonify({'success': False, 'message': 'Failed to delete user'}), 500
 
 if __name__ == '__main__':
-    init_database()
     print("🚀 RBAC Backend Server Starting...")
     print("📊 Database initialized with demo accounts")
     print("🔗 Frontend: http://localhost:5000")
