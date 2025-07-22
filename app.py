@@ -2,12 +2,24 @@ from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import sqlite3
 import hashlib
+import random
+import string
 import os
-from datetime import datetime
+import random
+import string
+from datetime import datetime, timedelta
+from email_config import send_otp_email
 
 app = Flask(__name__)
 app.secret_key = 'rbac-demo-secret-key-2024'
-CORS(app)
+CORS(app, origins=[
+    "http://localhost:5000",
+    "http://127.0.0.1:5000",
+    "http://127.0.0.1:5500",
+    "http://localhost:5500",
+    "http://127.0.0.1:3000",
+    "http://localhost:3000"
+])
 
 # Database configuration
 DATABASE = 'rbac_system.db'
@@ -69,6 +81,14 @@ def init_database():
                 VALUES (?, ?, ?, ?, ?, ?)
             ''', (user[0], user[1], user[2], hashed_password, user[4], user[5]))
     
+    # Create OTP codes table for email verification
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS otp_codes (
+            email TEXT PRIMARY KEY,
+            code TEXT NOT NULL,
+            expires_at TIMESTAMP NOT NULL
+        )
+    ''')
     conn.commit()
     conn.close()
 
@@ -142,54 +162,92 @@ def login():
     except Exception as e:
         return jsonify({'success': False, 'message': 'Login failed'}), 500
 
-@app.route('/api/auth/register', methods=['POST'])
-def register():
-    """Handle user registration"""
+@app.route('/api/auth/send-otp', methods=['POST'])
+def send_otp():
+    """Generate and send OTP code for registration"""
     try:
         data = request.get_json()
+        email = data.get('email')
+        if not email:
+            return jsonify({'success': False, 'message': 'Email required'}), 400
+        
+        # generate 6-digit OTP
+        code = ''.join(random.choices(string.digits, k=6))
+        expires_at = (datetime.utcnow() + timedelta(minutes=5)).isoformat()
+        
+        conn = get_db_connection()
+        # store or replace existing code
+        conn.execute('REPLACE INTO otp_codes (email, code, expires_at) VALUES (?, ?, ?)',
+                     (email, code, expires_at))
+        conn.commit()
+        conn.close()
+        
+        # send email or use demo code
+        try:
+            print(f"Attempting to send OTP to {email}")
+            send_otp_email(email, code)
+            print(f"OTP sent successfully to {email}")
+            return jsonify({'success': True, 'message': 'OTP sent successfully'})
+        except Exception as e:
+            print(f"Email sending failed: {e}")
+            print(f"Demo OTP for {email}: {code}")
+            return jsonify({'success': True, 'message': f'Demo mode: OTP is {code}', 'demo_code': code})
+    
+    except Exception as e:
+        print(f"Error in send_otp: {e}")
+        return jsonify({'success': False, 'message': 'Internal server error'}), 500
+
+@app.route('/api/auth/register', methods=['POST'])
+def register():
+    """Handle user registration with OTP verification"""
+    try:
+        data = request.get_json() or {}
         first_name = data.get('firstName')
         last_name = data.get('lastName')
         email = data.get('email')
         password = data.get('password')
         department = data.get('department', 'General')
-        
-        if not all([first_name, last_name, email, password]):
-            return jsonify({'success': False, 'message': 'All fields required'}), 400
-        
+        code = data.get('code')
+        # ensure user requested OTP before attempting registration
+        if code is None:
+            return jsonify({'success': False, 'message': 'Verification code missing. Please click Send Verification Code.'}), 400
+        # ensure all required fields provided
+        missing = [field for field, val in [('firstName', first_name), ('lastName', last_name), ('email', email), ('password', password), ('code', code)] if not val]
+        if missing:
+            return jsonify({'success': False, 'message': f'Missing required fields: {", ".join(missing)}'}), 400
         conn = get_db_connection()
-        
+        # verify OTP
+        otp_row = conn.execute('SELECT code, expires_at FROM otp_codes WHERE email = ?', (email,)).fetchone()
+        if not otp_row or otp_row['code'] != code:
+            conn.close()
+            return jsonify({'success': False, 'message': 'Invalid OTP code'}), 401
+        # check expiry
+        expires = datetime.fromisoformat(otp_row['expires_at'])
+        if expires < datetime.utcnow():
+            conn.execute('DELETE FROM otp_codes WHERE email = ?', (email,))
+            conn.commit()
+            conn.close()
+            return jsonify({'success': False, 'message': 'OTP code expired'}), 401
+        # remove OTP entry
+        conn.execute('DELETE FROM otp_codes WHERE email = ?', (email,))
+        conn.commit()
+        # check existing user
         existing = conn.execute('SELECT id FROM users WHERE email = ?', (email,)).fetchone()
         if existing:
             conn.close()
             return jsonify({'success': False, 'message': 'Email already registered'}), 409
-        
+        # proceed registration
         hashed_password = hash_password(password)
-        cursor = conn.execute('''
-            INSERT INTO users (first_name, last_name, email, password, role, department)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', (first_name, last_name, email, hashed_password, 'employee', department))
-        
+        cursor = conn.execute(
+            'INSERT INTO users (first_name, last_name, email, password, role, department) VALUES (?, ?, ?, ?, ?, ?)',
+            (first_name, last_name, email, hashed_password, 'employee', department)
+        )
         user_id = cursor.lastrowid
         conn.commit()
         conn.close()
-        
         log_action(user_id, 'register', f'New user registered: {email}')
-        
-        return jsonify({
-            'success': True,
-            'message': 'Registration successful',
-            'user': {
-                'id': user_id,
-                'firstName': first_name,
-                'lastName': last_name,
-                'email': email,
-                'role': 'employee',
-                'department': department,
-                'status': 'active'
-            }
-        })
-        
-    except Exception as e:
+        return jsonify({'success': True, 'message': 'Registration successful'});
+    except Exception:
         return jsonify({'success': False, 'message': 'Registration failed'}), 500
 
 @app.route('/api/users', methods=['GET'])

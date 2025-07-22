@@ -58,8 +58,17 @@ const demoUsers = {
 document.addEventListener('DOMContentLoaded', function() {
     console.log('DOM loaded, initializing app...');
     initializeDarkMode();
+    
+    // Add a check to see if we're on the right page
+    const currentPage = window.location.pathname;
+    console.log('Current page:', currentPage);
+    
     setupEventListeners();
     checkExistingSession();
+    
+    // Make sure the registration page is accessible
+    console.log('Registration page element:', document.getElementById('registerPage'));
+    console.log('Send OTP button:', document.getElementById('sendOtpBtn'));
 });
 
 // Initialize dark mode from localStorage
@@ -106,11 +115,19 @@ function showHomePage() {
 function showRegisterPage() {
     console.log('Showing register page');
     hideAllPages();
-    document.getElementById('registerPage').style.display = 'block';
+    const registerPage = document.getElementById('registerPage');
+    if (registerPage) {
+        registerPage.style.display = 'block';
+        console.log('Register page display set to block');
+    } else {
+        console.error('Register page element not found');
+    }
     
     // Initialize CAPTCHA after page is shown
     setTimeout(() => {
+        console.log('Initializing CAPTCHA...');
         initializeCaptcha();
+        console.log('CAPTCHA initialized');
     }, 100);
 }
 
@@ -158,6 +175,7 @@ function checkExistingSession() {
 
 // Setup event listeners
 function setupEventListeners() {
+    console.log('Setting up event listeners...');
     // Initialize CAPTCHA system
     initializeCaptcha();
     
@@ -165,6 +183,88 @@ function setupEventListeners() {
     document.querySelectorAll('.dark-mode-toggle').forEach(toggle => {
         toggle.addEventListener('click', toggleDarkMode);
     });
+
+    // Send OTP button for registration
+    const sendOtpBtn = document.getElementById('sendOtpBtn');
+    console.log('Send OTP button found:', sendOtpBtn);
+    if (sendOtpBtn) {
+        sendOtpBtn.addEventListener('click', function(event) {
+            console.log('Send OTP button clicked');
+            event.preventDefault();
+            event.stopPropagation();
+            
+            const emailField = document.getElementById('registerEmail');
+            const email = emailField ? emailField.value : '';
+            
+            if (!email) {
+                showToast('Enter email to receive code', 'error');
+                return;
+            }
+            
+            console.log('Sending OTP for email:', email);
+            
+            // Disable button to prevent multiple clicks
+            sendOtpBtn.disabled = true;
+            sendOtpBtn.textContent = 'Sending...';
+            
+            // Make API call with better error handling
+            fetch(API_BASE_URL + '/auth/send-otp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email })
+            })
+            .then(res => {
+                console.log('Response status:', res.status);
+                if (!res.ok) {
+                    throw new Error(`HTTP error! status: ${res.status}`);
+                }
+                return res.json();
+            })
+            .then(data => {
+                console.log('Response data:', data);
+                if (data.success) {
+                    const otpGroup = document.getElementById('otpGroup');
+                    const otpMessage = document.getElementById('otpMessage');
+                    const otpInput = document.getElementById('registerOtp');
+                    
+                    if (otpGroup) {
+                        otpGroup.style.display = 'block';
+                        console.log('OTP group made visible');
+                    }
+                    if (otpMessage) {
+                        otpMessage.style.display = 'block';
+                    }
+                    if (otpInput) {
+                        otpInput.focus();
+                    }
+                    
+                    if (data.demo_code) {
+                        showToast(`Demo mode: Your OTP is ${data.demo_code}`, 'success');
+                    } else {
+                        showToast('Verification code sent to email', 'success');
+                    }
+                    
+                    sendOtpBtn.textContent = 'Code Sent';
+                    sendOtpBtn.style.backgroundColor = '#10b981';
+                    sendOtpBtn.style.color = 'white';
+                } else {
+                    console.error('API returned error:', data);
+                    showToast(data.message || 'Failed to send code', 'error');
+                    sendOtpBtn.disabled = false;
+                    sendOtpBtn.textContent = 'Send Verification Code';
+                    sendOtpBtn.style.backgroundColor = '';
+                    sendOtpBtn.style.color = '';
+                }
+            }).catch(error => {
+                console.error('Error sending OTP:', error);
+                showToast('Error sending code. Please try again.', 'error');
+                sendOtpBtn.disabled = false;
+                sendOtpBtn.textContent = 'Send Verification Code';
+                sendOtpBtn.style.backgroundColor = '';
+                sendOtpBtn.style.color = '';
+            });
+        });
+    }
 
     // Login form
     const loginForm = document.getElementById('loginForm');
@@ -175,6 +275,10 @@ function setupEventListeners() {
     // Register form
     const registerForm = document.getElementById('registerForm');
     if (registerForm) {
+        // Add debugging for form submission
+        registerForm.addEventListener('submit', function(event) {
+            console.log('Register form submit event triggered');
+        });
         registerForm.addEventListener('submit', handleRegister);
     }
 
@@ -309,36 +413,56 @@ function handleLogin(event) {
 // Handle register form submission
 function handleRegister(event) {
     event.preventDefault();
-    
+    // Ensure OTP has been requested and entered
+    const otpGroup = document.getElementById('otpGroup');
+    const otpInput = document.getElementById('registerOtp');
+    if (!otpGroup || otpGroup.style.display === 'none') {
+        showToast('Please click "Send Verification Code" to receive your code.', 'info');
+        return;
+    }
+    if (otpGroup.style.display !== 'none' && (!otpInput || !otpInput.value.trim())) {
+        showToast('Enter the verification code sent to your email.', 'error');
+        if (otpInput) otpInput.focus();
+        return;
+    }
     // Validate CAPTCHA first
     if (!validateCaptcha(false)) {
         return;
     }
-    
+    // collect form data
     const formData = new FormData(event.target);
+    // debug payload
+    console.log('Register payload fields:', Array.from(formData.entries()));
     const userData = {
         firstName: formData.get('firstName'),
         lastName: formData.get('lastName'),
         email: formData.get('email'),
         password: formData.get('password'),
         confirmPassword: formData.get('confirmPassword'),
-        department: formData.get('department')
+        department: formData.get('department'),
+        code: formData.get('code')
     };
-    
-    // Basic validation
+    console.log('Register userData:', userData);
+    // validate passwords
     if (userData.password !== userData.confirmPassword) {
         showToast('Passwords do not match', 'error');
         return;
     }
-    
-    if (demoUsers[userData.email]) {
-        showToast('User already exists', 'error');
-        return;
-    }
-
-    // Registration successful
-    showToast('Registration successful! Please login.', 'success');
-    showLoginPage();
+    // submit to backend
+    fetch(API_BASE_URL + '/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(userData)
+    })
+    .then(res => res.json().then(data => ({ status: res.status, data })))
+    .then(({ status, data }) => {
+        if (status === 200 && data.success) {
+            showToast('Registration successful! Please login.', 'success');
+            showLoginPage();
+        } else {
+            showToast(data.message || 'Registration failed', 'error');
+        }
+    }).catch(() => showToast('Error during registration', 'error'));
 }
 
 // Setup dashboard based on user role
@@ -1329,9 +1453,6 @@ function showAddUser() {
                     </select>
                 </div>
                 <div class="form-group" style="margin-bottom: 16px;">
-                    <label for="addUserStatus" style="display: block; margin-bottom: 6px; font-weight: 500;">Status</label>
-                    <select id="addUserStatus" name="status" required 
-                            style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 14px;">
                         <option value="active">Active</option>
                         <option value="inactive">Inactive</option>
                     </select>

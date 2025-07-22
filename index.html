@@ -5,8 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>RBAC Login - Cybersecurity Demo</title>
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="otp-styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- Google reCAPTCHA API -->
+    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
 </head>
 <body>
     <!-- Toast notification container -->
@@ -268,7 +271,10 @@
                 
                 <div class="form-group">
                     <label for="registerEmail">Email Address</label>
-                    <input type="email" id="registerEmail" name="email" placeholder="Enter your email" required>
+                    <div class="input-wrapper">
+                        <input type="email" id="registerEmail" name="email" placeholder="Enter your email" required>
+                        <button type="button" id="sendOtpBtn" class="btn btn-outline">Send Verification Code</button>
+                    </div>
                 </div>
                 
                 <div class="form-group">
@@ -280,10 +286,10 @@
                         </div>
                         <div class="strength-text" id="strengthText">Password strength: Weak</div>
                     </div>
-                    <div class="form-group">
-                        <label for="confirmPassword">Confirm Password</label>
-                        <input type="password" id="confirmPassword" name="confirmPassword" placeholder="Confirm your password" required>
-                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="confirmPassword">Confirm Password</label>
+                    <input type="password" id="confirmPassword" name="confirmPassword" placeholder="Confirm your password" required>
                 </div>
                 
                 
@@ -299,8 +305,16 @@
                     </select>
                 </div>
 
-                <!-- CAPTCHA Section -->
-                <div class="captcha-section">
+                <!-- OTP Verification Section -->
+                <div class="form-group otp-group" id="otpGroup" style="display:none;">
+                    <label for="registerOtp">Verification Code</label>
+                    <div class="input-wrapper">
+                        <input type="text" id="registerOtp" name="code" placeholder="Enter verification code">
+                    </div>
+                    <small id="otpMessage" style="color:green; display:none;">Code sent. Expires in 5 minutes.</small>
+                </div>
+                 <!-- CAPTCHA Section -->
+                 <div class="captcha-section">
                     <div class="captcha-tabs">
                         <button type="button" class="captcha-tab active" data-captcha="text">Text CAPTCHA</button>
                         <button type="button" class="captcha-tab" data-captcha="image">Image CAPTCHA</button>
@@ -335,6 +349,11 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Google reCAPTCHA widget -->
+                <!-- <div class="form-group" style="margin-top: 16px;">
+                    <div class="g-recaptcha" data-sitekey="6Lfaw4MrAAAAAMpFV4PR-wGHZscV6xJ6ftktiqsi"></div>
+                </div> -->
 
                 <button type="submit" class="register-btn">
                     <i class="fas fa-user-plus"></i>
@@ -417,6 +436,11 @@
                             </button>
                         </div>
                     </div>
+                </div>
+
+                <!-- Google reCAPTCHA widget -->
+                <div class="form-group" style="margin-top: 16px;">
+                    <div class="g-recaptcha" data-sitekey="6Lfaw4MrAAAAAMpFV4PR-wGHZscV6xJ6ftktiqsi"></div>
                 </div>
 
                 <button type="submit" class="login-btn">
