@@ -23,8 +23,6 @@ CORS(app, origins=[
     "https://rbac-uwxj.onrender.com"
 ])
 
-init_database()
-
 # Database configuration
 DATABASE = 'rbac_system.db'
 
@@ -109,6 +107,8 @@ def log_action(user_id, action, details=None):
     ''', (user_id, action, details))
     conn.commit()
     conn.close()
+
+init_database()
 
 @app.route('/')
 def index():
