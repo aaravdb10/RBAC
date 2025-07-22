@@ -18,7 +18,9 @@ CORS(app, origins=[
     "http://127.0.0.1:5500",
     "http://localhost:5500",
     "http://127.0.0.1:3000",
-    "http://localhost:3000"
+    "http://localhost:3000",
+    "https://rbac-nine-virid.vercel.app",
+    "https://rbac-uwxj.onrender.com"
 ])
 
 # Database configuration
@@ -108,8 +110,7 @@ def log_action(user_id, action, details=None):
 
 @app.route('/')
 def index():
-    """Serve the main HTML page"""
-    return send_from_directory('.', 'index.html')
+    return "RBAC Backend API is running!"
 
 @app.route('/<path:filename>')
 def serve_static(filename):

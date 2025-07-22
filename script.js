@@ -5,7 +5,7 @@
 let currentUser = null;
 let currentRole = null;
 let isDarkMode = false;
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = 'https://rbac-uwxj.onrender.com/api';
 
 // Mock Data for demonstration
 const mockData = {
